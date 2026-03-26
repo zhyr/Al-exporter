@@ -208,6 +208,7 @@
       <span id="last-scan-time" style="font-size:12px;color:#9ca3b0;margin-right:8px;"></span>
       <button class="btn-export" style="background:#7c3aed; margin-right:8px;" id="btn-import" onclick="openImport()">↓ Import</button>
       <button class="btn-export" style="background:#059669; margin-right:8px;" id="btn-scan" onclick="triggerScan(true)">增量扫描</button>
+      <button class="btn-export" style="background:#ea580c; margin-right:8px;" id="btn-plugins" onclick="openPlugins()">🧩 插件</button>
       <button class="btn-export" id="btn-settings" onclick="openSettings()">⚙ 设置</button>
       <button class="btn-export" id="btn-export-all" onclick="exportAll()">⬆ Export All</button>
     </div>
@@ -234,8 +235,318 @@
 
 
 
+<!-- Plugins Modal -->
+<div class="modal-overlay" id="plugins-overlay" onclick="closePlugins(event)">
+  <div class="modal" id="plugins-modal" onclick="event.stopPropagation()" style="width: 500px;">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
+      <h3>✨ 插件列表</h3>
+      <button class="btn-close" onclick="closePlugins()">✕</button>
+    </div>
+    
+    <div class="cards-grid">
+      <div class="thread-card" style="cursor:default;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="card-title">🛡️ 敏感数据脱敏</div>
+          <button class="btn-export" id="btn-run-desensitize" style="background:#0ea5e9; padding:6px 14px; font-size:12px;" onclick="runDesensitizePlugin()">执行扫描</button>
+        </div>
+        <div style="font-size:12px; color:#6b7280; margin-top:8px; line-height:1.5;">
+          扫描所有的会话记录（包括 Prompt 和上下文文件），寻找并替换 API Keys (OpenAI, Anthropic 等) 和 Access Keys (百度云, AWS等)。<br/>
+          将这些私密信息统一安全地脱敏成了 <code>***MASKED***</code>，并提供脱敏统计报告。
+        </div>
+        <div id="desensitize-progress" style="margin-top:12px; font-size:12px; color:#4f46e5; font-weight:600; display:none;"></div>
+      </div>
+      
+      <div class="thread-card" style="cursor:default;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="card-title">🧑‍💼 个人隐私信息清理</div>
+          <button class="btn-export" id="btn-run-privacy" style="background:#0ea5e9; padding:6px 14px; font-size:12px;" onclick="runPrivacyPlugin()">执行清理</button>
+        </div>
+        <div style="font-size:12px; color:#6b7280; margin-top:8px; line-height:1.5;">
+          自动扫描并脱敏常见的个人隐私信息（PII），包括：大陆身份证号码、银行卡号、手机号、电子邮件等。<br/>
+          将隐私信息替换为 <code>***PII_MASKED***</code>。
+        </div>
+        <div id="privacy-progress" style="margin-top:12px; font-size:12px; color:#4f46e5; font-weight:600; display:none;"></div>
+      </div>
+
+      <div class="thread-card" style="cursor:default;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="card-title">🏢 商业机密与内网资产脱敏</div>
+          <button class="btn-export" id="btn-run-assets" style="background:#0ea5e9; padding:6px 14px; font-size:12px;" onclick="runAssetsPlugin()">执行扫描</button>
+        </div>
+        <div style="font-size:12px; color:#6b7280; margin-top:8px; line-height:1.5;">
+          扫描并脱敏数据库连接串（MySQL, MongoDB等）、内网 IP 以及 RSA 私钥/证书。
+        </div>
+        <div id="assets-progress" style="margin-top:12px; font-size:12px; color:#4f46e5; font-weight:600; display:none;"></div>
+      </div>
+
+      <div class="thread-card" style="cursor:default;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="card-title">✂️ 冗余上下文与报错瘦身</div>
+          <button class="btn-export" id="btn-run-prune" style="background:#0ea5e9; padding:6px 14px; font-size:12px;" onclick="runPrunePlugin()">执行瘦身</button>
+        </div>
+        <div style="font-size:12px; color:#6b7280; margin-top:8px; line-height:1.5;">
+          对单条超过 3000 字符的超长消息（如冗余文件内容、超长报错堆栈）进行首尾截断，大幅减小数据体积。
+        </div>
+        <div id="prune-progress" style="margin-top:12px; font-size:12px; color:#4f46e5; font-weight:600; display:none;"></div>
+      </div>
+
+      <div class="thread-card" style="cursor:default;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="card-title">🤔 废话与问候语过滤</div>
+          <button class="btn-export" id="btn-run-chitchat" style="background:#0ea5e9; padding:6px 14px; font-size:12px;" onclick="runChitchatPlugin()">执行过滤</button>
+        </div>
+        <div style="font-size:12px; color:#6b7280; margin-top:8px; line-height:1.5;">
+          自动去除 AI 回复中常见的客套话（如“好的，我会...”、“希望对你有帮助”等），保留核心知识。
+        </div>
+        <div id="chitchat-progress" style="margin-top:12px; font-size:12px; color:#4f46e5; font-weight:600; display:none;"></div>
+      </div>
+
+      <div class="thread-card" style="cursor:default;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="card-title">🔠 敏感变量与 JWT 扫描</div>
+          <button class="btn-export" id="btn-run-secrets" style="background:#0ea5e9; padding:6px 14px; font-size:12px;" onclick="runSecretsPlugin()">执行扫描</button>
+        </div>
+        <div style="font-size:12px; color:#6b7280; margin-top:8px; line-height:1.5;">
+          扫描代码中的硬编码密码变量（password = "..."）以及过长的 JSON Web Tokens (JWT)。
+        </div>
+        <div id="secrets-progress" style="margin-top:12px; font-size:12px; color:#4f46e5; font-weight:600; display:none;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Application Logic -->
 <script>
+function closePlugins(e) {
+  if (e && e.target !== e.currentTarget) return;
+  document.getElementById('plugins-overlay').classList.remove('open');
+  // Hide all progress
+  const progresses = ['desensitize-progress', 'privacy-progress', 'assets-progress', 'prune-progress', 'chitchat-progress', 'secrets-progress'];
+  progresses.forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.style.display = 'none';
+  });
+  
+  // Reset all buttons
+  const btns = [
+    {id: 'btn-run-desensitize', text: '执行扫描'},
+    {id: 'btn-run-privacy', text: '执行清理'},
+    {id: 'btn-run-assets', text: '执行扫描'},
+    {id: 'btn-run-prune', text: '执行瘦身'},
+    {id: 'btn-run-chitchat', text: '执行过滤'},
+    {id: 'btn-run-secrets', text: '执行扫描'}
+  ];
+  btns.forEach(b => {
+    const el = document.getElementById(b.id);
+    if (el) {
+      el.disabled = false;
+      el.textContent = b.text;
+      el.style.opacity = '1';
+    }
+  });
+}
+
+function openPlugins() {
+  document.getElementById('plugins-overlay').classList.add('open');
+}
+
+async function runDesensitizePlugin() {
+  const btn = document.getElementById('btn-run-desensitize');
+  const progressEl = document.getElementById('desensitize-progress');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.style.opacity = '0.5';
+  btn.textContent = '扫描中...';
+  progressEl.style.display = 'block';
+  progressEl.innerHTML = '准备扫描...';
+
+  try {
+    const res = await fetch(`${API_BASE}/api/plugins/desensitize`, { 
+      method: 'POST', 
+      body: JSON.stringify({}), 
+      headers: { 'Content-Type': 'application/json' } 
+    });
+    const { job_id } = await res.json();
+    
+    const sse = new EventSource(`${API_BASE}/api/jobs/${job_id}/events`);
+    
+    sse.onmessage = async (e) => {
+      const data = JSON.parse(e.data);
+      if (data.status === 'done') {
+        sse.close();
+        btn.textContent = '已完成';
+        const stats = data.result?.stats || {};
+        const matchesInfo = Object.entries(stats.matches || {}).map(([k,v]) => `${k}: ${v}`).join(', ');
+        
+        progressEl.innerHTML = `
+          <div style="padding:10px; background:#f0fdf4; color:#166534; border-radius:6px; margin-top:8px; border:1px solid #bbf7d0;">
+            ✅ <b>扫描完成！</b><br/>
+            共扫描：${stats.totalRecordsScanned || 0} 个会话记录文件<br/>
+            已脱敏修改：${stats.filesModified || 0} 个文件<br/>
+            ${matchesInfo ? `<br/>💡 <b>发现敏感数据:</b><br/>${matchesInfo}` : '<br/>未发现未授权敏感数据。'}
+          </div>
+        `;
+        // Refresh dashboard data
+        triggerScan(true); 
+      } else if (data.status === 'failed') {
+        sse.close();
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.textContent = '重试';
+        progressEl.innerHTML = `<span style="color:#dc2626">失败: ${data.error}</span>`;
+      } else {
+        progressEl.innerHTML = `[${data.progress||0}%] ${data.message || 'Scanning...'}`;
+      }
+    };
+    
+    sse.onerror = () => {
+      sse.close();
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.textContent = '重试';
+      progressEl.innerHTML = `<span style="color:#dc2626">连接中断</span>`;
+    };
+  } catch (err) {
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.textContent = '重试';
+    progressEl.innerHTML = `<span style="color:#dc2626">请求失败: ${err.message}</span>`;
+  }
+}
+
+async function runPrivacyPlugin() {
+  const btn = document.getElementById('btn-run-privacy');
+  const progressEl = document.getElementById('privacy-progress');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.style.opacity = '0.5';
+  btn.textContent = '清理中...';
+  progressEl.style.display = 'block';
+  progressEl.innerHTML = '准备清理...';
+
+  try {
+    const res = await fetch(`${API_BASE}/api/plugins/privacy`, { 
+      method: 'POST', 
+      body: JSON.stringify({}), 
+      headers: { 'Content-Type': 'application/json' } 
+    });
+    const { job_id } = await res.json();
+    
+    const sse = new EventSource(`${API_BASE}/api/jobs/${job_id}/events`);
+    
+    sse.onmessage = async (e) => {
+      const data = JSON.parse(e.data);
+      if (data.status === 'done') {
+        sse.close();
+        btn.textContent = '已完成';
+        const stats = data.result?.stats || {};
+        const matchesInfo = Object.entries(stats.matches || {}).map(([k,v]) => `${k}: ${v}`).join(', ');
+        
+        progressEl.innerHTML = `
+          <div style="padding:10px; background:#f0fdf4; color:#166534; border-radius:6px; margin-top:8px; border:1px solid #bbf7d0;">
+            ✅ <b>清理完成！</b><br/>
+            共扫描：${stats.totalRecordsScanned || 0} 个会话记录文件<br/>
+            已修改：${stats.filesModified || 0} 个文件<br/>
+            ${matchesInfo ? `<br/>💡 <b>发现隐私数据:</b><br/>${matchesInfo}` : '<br/>未发现个人隐私数据。'}
+          </div>
+        `;
+        triggerScan(true); 
+      } else if (data.status === 'failed') {
+        sse.close();
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.textContent = '重试';
+        progressEl.innerHTML = `<span style="color:#dc2626">失败: ${data.error}</span>`;
+      } else {
+        progressEl.innerHTML = `[${data.progress||0}%] ${data.message || 'Scanning...'}`;
+      }
+    };
+    
+    sse.onerror = () => {
+      sse.close();
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.textContent = '重试';
+      progressEl.innerHTML = `<span style="color:#dc2626">连接中断</span>`;
+    };
+  } catch (err) {
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.textContent = '重试';
+    progressEl.innerHTML = `<span style="color:#dc2626">请求失败: ${err.message}</span>`;
+  }
+}
+
+// Utility to run shared plugin logic
+async function runGenericPlugin(pluginPath, btnId, progressId, actionVerb = '扫描') {
+  const btn = document.getElementById(btnId);
+  const progressEl = document.getElementById(progressId);
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.style.opacity = '0.5';
+  btn.textContent = `${actionVerb}中...`;
+  progressEl.style.display = 'block';
+  progressEl.innerHTML = `准备${actionVerb}...`;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/plugins/${pluginPath}`, { 
+      method: 'POST', 
+      body: JSON.stringify({}), 
+      headers: { 'Content-Type': 'application/json' } 
+    });
+    const { job_id } = await res.json();
+    
+    const sse = new EventSource(`${API_BASE}/api/jobs/${job_id}/events`);
+    
+    sse.onmessage = async (e) => {
+      const data = JSON.parse(e.data);
+      if (data.status === 'done') {
+        sse.close();
+        btn.textContent = '已完成';
+        const stats = data.result?.stats || {};
+        const matchesInfo = Object.entries(stats.matches || {}).map(([k,v]) => `${k}: ${v}`).join(', ');
+        
+        progressEl.innerHTML = `
+          <div style="padding:10px; background:#f0fdf4; color:#166534; border-radius:6px; margin-top:8px; border:1px solid #bbf7d0;">
+            ✅ <b>${actionVerb}完成！</b><br/>
+            共扫描：${stats.totalRecordsScanned || 0} 个会话记录文件<br/>
+            已修改：${stats.filesModified || 0} 个文件<br/>
+            ${matchesInfo ? `<br/>💡 <b>明细:</b><br/>${matchesInfo}` : `<br/>未发现需要${actionVerb}的内容。`}
+          </div>
+        `;
+        triggerScan(true); 
+      } else if (data.status === 'failed') {
+        sse.close();
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.textContent = '重试';
+        progressEl.innerHTML = `<span style="color:#dc2626">失败: ${data.error}</span>`;
+      } else {
+        progressEl.innerHTML = `[${data.progress||0}%] ${data.message || 'Processing...'}`;
+      }
+    };
+    
+    sse.onerror = () => {
+      sse.close();
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.textContent = '重试';
+      progressEl.innerHTML = `<span style="color:#dc2626">连接中断</span>`;
+    };
+  } catch (err) {
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.textContent = '重试';
+    progressEl.innerHTML = `<span style="color:#dc2626">请求失败: ${err.message}</span>`;
+  }
+}
+
+function runAssetsPlugin() { runGenericPlugin('assets', 'btn-run-assets', 'assets-progress', '脱敏'); }
+function runPrunePlugin() { runGenericPlugin('prune', 'btn-run-prune', 'prune-progress', '瘦身'); }
+function runChitchatPlugin() { runGenericPlugin('chitchat', 'btn-run-chitchat', 'chitchat-progress', '过滤'); }
+function runSecretsPlugin() { runGenericPlugin('secrets', 'btn-run-secrets', 'secrets-progress', '扫描'); }
+
+
 // ── State ────────────────────────────────────────────────────────────────────
 let records = [];
 let enriched = []; // record with token split

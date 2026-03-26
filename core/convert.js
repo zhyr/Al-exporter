@@ -211,23 +211,17 @@ export function computeStats(records, groupBy = ["project", "source"]) {
   };
 }
 
+import pLimit from 'p-limit';
+import path from 'node:path';
+import fs from 'fs-extra';
+
 /**
  * 保存记录到指定目录
  * @param {object[]} records
  * @param {string} outputDir
  */
 export async function saveRecordsToDir(records, outputDir) {
-  const fsPromises = await import('node:fs/promises');
-  const pathModule = await import('node:path');
-  const fs = {
-    ensureDir: async (dir) => {
-      await fsPromises.mkdir(dir, { recursive: true });
-    },
-    writeFile: async (file, content) => {
-      await fsPromises.writeFile(file, content, 'utf-8');
-    }
-  };
-  const path = pathModule;
+  const limit = pLimit(10); // Limit to 10 concurrent writes to avoid EMFILE
   
   await fs.ensureDir(outputDir);
   
@@ -239,15 +233,20 @@ export async function saveRecordsToDir(records, outputDir) {
     bySource[src].push(r);
   }
   
+  const tasks = [];
   for (const [source, recs] of Object.entries(bySource)) {
     const dir = path.join(outputDir, source);
-    await fs.ensureDir(dir);
-    
-    for (const r of recs) {
-      const id = r.thread_id || r.messages?.[0]?.content?.slice(0, 20) || Date.now();
-      const safeId = String(id).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 50);
-      const filePath = path.join(dir, `${safeId}.json`);
-      await fs.writeFile(filePath, JSON.stringify(r, null, 2));
-    }
+    tasks.push(limit(async () => {
+      await fs.ensureDir(dir);
+      
+      await Promise.all(recs.map(r => limit(async () => {
+        const id = r.thread_id || r.messages?.[0]?.content?.slice(0, 20) || Date.now();
+        const safeId = String(id).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 50);
+        const filePath = path.join(dir, `${safeId}.json`);
+        await fs.writeFile(filePath, JSON.stringify(r, null, 2));
+      })));
+    }));
   }
+  
+  await Promise.all(tasks);
 }

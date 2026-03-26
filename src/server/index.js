@@ -45,6 +45,12 @@ async function route(req, res) {
 
   log.debug(`${method} ${pathname}`);
 
+  // ── Favicon
+  if (pathname === "/favicon.ico") {
+    res.writeHead(204);
+    return res.end();
+  }
+
   // ── Health / Version
   if (method === "GET" && pathname === "/api/health") return respond(res, 200, { status: "ok" });
   if (method === "GET" && pathname === "/api/version") return respond(res, 200, { version: EXPORTER_VERSION, schema_version: SCHEMA_VERSION });
@@ -69,6 +75,14 @@ async function route(req, res) {
 
   // ── List supported agents
   if (method === "GET" && pathname === "/api/agents") return handleListAgents(req, res);
+
+  // ── Plugins
+  if (method === "POST" && pathname === "/api/plugins/desensitize") return handlePluginDesensitize(req, res);
+  if (method === "POST" && pathname === "/api/plugins/privacy") return handlePluginPrivacy(req, res);
+  if (method === "POST" && pathname === "/api/plugins/assets") return handlePluginAssets(req, res);
+  if (method === "POST" && pathname === "/api/plugins/prune") return handlePluginPrune(req, res);
+  if (method === "POST" && pathname === "/api/plugins/chitchat") return handlePluginChitchat(req, res);
+  if (method === "POST" && pathname === "/api/plugins/secrets") return handlePluginSecrets(req, res);
 
   // ── Settings
   if (method === "GET" && pathname === "/api/settings") return handleSettings(req, res);
@@ -229,6 +243,128 @@ async function handleConvert(req, res) {
       const { runConvert } = await import("../commands/convert.js");
       finishJob(jobId, await runConvert(body));
     } catch (err) { failJob(jobId, err); }
+  })();
+}
+
+async function handlePluginDesensitize(req, res) {
+  const body = await readBody(req);
+  const dataDir = body.dataDir || serverSettings.dataDir || OUTPUT_DIR;
+  const jobId = createJob("plugin-desensitize");
+  respond(res, 202, { job_id: jobId });
+
+  (async () => {
+    try {
+      updateJob(jobId, { status: "running", message: "Starting desensitization plugin..." });
+      const { runDesensitize } = await import("../../core/plugins/desensitize.js");
+      const stats = await runDesensitize(dataDir, (prog) => {
+        updateJob(jobId, { progress: prog.progress, phase: prog.phase, message: prog.message });
+      });
+      finishJob(jobId, { stats });
+    } catch (err) {
+      failJob(jobId, err);
+      log.error("Desensitize plugin failed", { error: err.message });
+    }
+  })();
+}
+
+async function handlePluginPrivacy(req, res) {
+  const body = await readBody(req);
+  const dataDir = body.dataDir || serverSettings.dataDir || OUTPUT_DIR;
+  const jobId = createJob("plugin-privacy");
+  respond(res, 202, { job_id: jobId });
+
+  (async () => {
+    try {
+      updateJob(jobId, { status: "running", message: "Starting privacy cleanup plugin..." });
+      const { runPrivacyCleanup } = await import("../../core/plugins/privacy.js");
+      const stats = await runPrivacyCleanup(dataDir, (prog) => {
+        updateJob(jobId, { progress: prog.progress, phase: prog.phase, message: prog.message });
+      });
+      finishJob(jobId, { stats });
+    } catch (err) {
+      failJob(jobId, err);
+      log.error("Privacy cleanup plugin failed", { error: err.message });
+    }
+  })();
+}
+
+async function handlePluginAssets(req, res) {
+  const body = await readBody(req);
+  const dataDir = body.dataDir || serverSettings.dataDir || OUTPUT_DIR;
+  const jobId = createJob("plugin-assets");
+  respond(res, 202, { job_id: jobId });
+
+  (async () => {
+    try {
+      updateJob(jobId, { status: "running", message: "Starting assets cleanup plugin..." });
+      const { runAssetsCleanup } = await import("../../core/plugins/assets.js");
+      const stats = await runAssetsCleanup(dataDir, (prog) => {
+        updateJob(jobId, { progress: prog.progress, phase: prog.phase, message: prog.message });
+      });
+      finishJob(jobId, { stats });
+    } catch (err) {
+      failJob(jobId, err);
+    }
+  })();
+}
+
+async function handlePluginPrune(req, res) {
+  const body = await readBody(req);
+  const dataDir = body.dataDir || serverSettings.dataDir || OUTPUT_DIR;
+  const jobId = createJob("plugin-prune");
+  respond(res, 202, { job_id: jobId });
+
+  (async () => {
+    try {
+      updateJob(jobId, { status: "running", message: "Starting prune cleanup plugin..." });
+      const { runPruneCleanup } = await import("../../core/plugins/prune.js");
+      const stats = await runPruneCleanup(dataDir, (prog) => {
+        updateJob(jobId, { progress: prog.progress, phase: prog.phase, message: prog.message });
+      });
+      finishJob(jobId, { stats });
+    } catch (err) {
+      failJob(jobId, err);
+    }
+  })();
+}
+
+async function handlePluginChitchat(req, res) {
+  const body = await readBody(req);
+  const dataDir = body.dataDir || serverSettings.dataDir || OUTPUT_DIR;
+  const jobId = createJob("plugin-chitchat");
+  respond(res, 202, { job_id: jobId });
+
+  (async () => {
+    try {
+      updateJob(jobId, { status: "running", message: "Starting chitchat cleanup plugin..." });
+      const { runChitchatCleanup } = await import("../../core/plugins/chitchat.js");
+      const stats = await runChitchatCleanup(dataDir, (prog) => {
+        updateJob(jobId, { progress: prog.progress, phase: prog.phase, message: prog.message });
+      });
+      finishJob(jobId, { stats });
+    } catch (err) {
+      failJob(jobId, err);
+    }
+  })();
+}
+
+async function handlePluginSecrets(req, res) {
+  const body = await readBody(req);
+  const dataDir = body.dataDir || serverSettings.dataDir || OUTPUT_DIR;
+  const jobId = createJob("plugin-secrets");
+  respond(res, 202, { job_id: jobId });
+
+  (async () => {
+    try {
+      updateJob(jobId, { status: "running", message: "Starting secrets cleanup plugin..." });
+      const { runSecretsCleanup } = await import("../../core/plugins/secrets.js");
+      const stats = await runSecretsCleanup(dataDir, (prog) => {
+        updateJob(jobId, { progress: prog.progress, phase: prog.phase, message: prog.message });
+      });
+      finishJob(jobId, { stats });
+    } catch (err) {
+      failJob(jobId, err);
+    }
   })();
 }
 
