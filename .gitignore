@@ -20,6 +20,7 @@ agent-backup/
 agent-backup-test/
 docs/
 *.log
+viewer/data.js
 
 # Test coverage
 coverage/
