@@ -162,8 +162,9 @@
     }
     .modal-overlay.open { display: flex; }
     .modal {
-      background: #fff; border-radius: 12px; padding: 24px; width: 420px; max-width: 90vw;
+      background: #fff; border-radius: 12px; padding: 24px; width: 800px; max-width: 95vw;
       box-shadow: 0 8px 32px rgba(0,0,0,.2);
+      display: flex; flex-direction: column;
     }
     .modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
     .modal-row { margin-bottom: 16px; }
@@ -181,6 +182,26 @@
     .btn-cancel:hover { background: #e5e7ef; }
     .btn-save { background: #4f46e5; border: none; color: #fff; }
     .btn-save:hover { background: #4338ca; }
+
+    /* ── Plugin Grid ── */
+    .plugin-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin-top: 8px;
+    }
+    @media (max-width: 600px) {
+      .plugin-grid { grid-template-columns: 1fr; }
+    }
+    .modal-scroll {
+      max-height: 70vh;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .modal-scroll::-webkit-scrollbar { width: 6px; }
+    .modal-scroll::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
+    .modal-scroll::-webkit-scrollbar-track { background: transparent; }
+
   </style>
 </head>
 <body>
@@ -243,7 +264,9 @@
       <button class="btn-close" onclick="closePlugins()">✕</button>
     </div>
     
-    <div class="cards-grid">
+    <div class="modal-scroll">
+      <div class="plugin-grid">
+
       <div class="thread-card" style="cursor:default;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <div class="card-title">🛡️ 敏感数据脱敏</div>
@@ -310,6 +333,7 @@
           扫描代码中的硬编码密码变量（password = "..."）以及过长的 JSON Web Tokens (JWT)。
         </div>
         <div id="secrets-progress" style="margin-top:12px; font-size:12px; color:#4f46e5; font-weight:600; display:none;"></div>
+      </div>
       </div>
     </div>
   </div>
