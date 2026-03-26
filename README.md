@@ -4,8 +4,8 @@
 
 [中文](#中文)  | [English](#english)
 
-(overview.png)
-(detail-interactive-threads.png)
+![Overview](overview.png)
+![Detail](detail-interactive-threads.png)
 
 ---
 ## 中文
