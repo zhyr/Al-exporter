@@ -1,153 +1,13 @@
 # AI Exporter
 
-> Scan, backup, export, and analyze conversations from AI coding tools
+> 一键扫描、备份、导出 AI 编码工具对话数据，支持 26+ 主流 Agent，数据可转换为 Markdown/JSON/训练格式，赋能 AI 训练与跨工具迁移。
 
-[English](#english) | [中文](#中文)
+[中文](#中文)  | [English](#english)
 
----
-
-## English
-
-### Overview
-
-AI Exporter is a powerful tool for scanning, backing up, and exporting conversations from various AI coding assistants. It helps developers preserve their AI interaction history and convert it into formats suitable for training, analysis, or migration between different AI coding tools.
-
-### Features
-
-- **Multi-Source Scanning**: Automatically discover and scan AI coding tool data from multiple sources
-- **Format Recognition**: Intelligent identification of various data formats
-- **Unified Schema**: Export to standardized JSON format with consistent structure
-- **Multiple Export Formats**: 
-  - JSON / JSONL for machine processing
-  - Markdown for human-readable documentation
-  - Training data formats (SFT, ShareGPT)
-- **Import Functionality**: Import data into specific AI coding agents
-- **Web Interface**: User-friendly web UI for easy operation
-- **Real-time Progress**: Live scanning progress with SSE updates
-
-### Supported AI Coding Tools
-
-| Tool | Directory | Status |
-|------|-----------|--------|
-| Cursor | `.cursor/` | ✅ |
-| Claude Code | `.claude/` | ✅ |
-| OpenCode/Codex | `.opencode/`, `.codex/` | ✅ |
-| Antigravity | `.antigravity/` | ✅ |
-| Cline | `.cline/` | ✅ |
-| Windsurf | `.windsurf/` | ✅ |
-| CodeBuddy | `.codebuddy/` | ✅ |
-| Kiro | `.kiro/` | ✅ |
-| iFlow | `.iflow/` | ✅ |
-| Qoder | `.qoder/` | ✅ |
-| Trae | `.trae/` | ✅ |
-| Augment | `.augment/` | ✅ |
-| Zed | `.zed/` | ✅ |
-| Aider | `.aider/` | ✅ |
-| Continue | `.continue/` | ✅ |
-| GitHub Copilot | `.github/copilot/` | ✅ |
-| Tabnine | `.tabnine/` | ✅ |
-| Amazon Q | `.aws/amazonq/` | ✅ |
-| DeepSeek | `.deepseek/` | ✅ |
-| 通义灵码 | `.tongyi/` | ✅ |
-| 讯飞 iFlyCode | `.iflycode/` | ✅ |
-| Fitten Code | `.fitten/` | ✅ |
-| Devin | `.devin/` | ✅ |
-| Replit | `.replit/` | ✅ |
-| Lovable/Bolt/v0 | `.lovable/`, `.bolt/`, `.v0/` | ✅ |
-
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/your-repo/ai-exporter.git
-cd ai-exporter
-
-# Install dependencies
-npm install
-```
-
-### Usage
-
-#### Command Line Interface
-
-```bash
-# Scan all supported tools
-node index.js scan
-
-# Export data
-node index.js export
-
-# Start web server
-node open-viewer.js
-npm run serve
-```
-
-#### Web Interface
-
-1. Start the web server:
-   ```bash
-   node open-viewer.js
-   ```
-2. Open your browser to `http://127.0.0.1:8080`
-3. Use the web UI to:
-   - Select workspace and scan
-   - Preview data
-   - Export in various formats
-   - Import data to specific agents
-
-### Configuration
-
-Default storage locations by platform (macOS):
-
-- **Data Output**: `./agent-backup/`
-- **Web Server**: `http://127.0.0.1:8080`
-
-### Project Structure
-
-```
-AI-exporter/
-├── core/               # Core scanning and processing logic
-│   ├── scan.js        # Multi-source scanning
-│   ├── normalize.js   # Data normalization
-│   ├── convert.js     # Format conversion
-│   └── import.js      # Agent-specific import
-├── src/               # CLI and server
-│   ├── server/       # Express server with REST API
-│   └── cli.js        # Command line interface
-├── viewer/            # Web UI
-├── tests/             # Unit tests
-└── adapter/           # Format adapters
-```
-
-### API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/health` | Health check |
-| POST | `/api/scan` | Start scanning |
-| GET | `/api/scan/status` | Scan status |
-| POST | `/api/export` | Export data |
-| POST | `/api/import-file` | Import file |
-| POST | `/api/import-to-agent` | Import to agent |
-| GET | `/api/agents` | List supported agents |
-| GET | `/api/stats` | Statistics |
-
-### Development
-
-```bash
-# Run tests
-npm test
-
-# Run with coverage
-npm run test:cov
-```
-
-### License
-
-MIT License
+(overview.png)
+(detail-interactive-threads.png)
 
 ---
-
 ## 中文
 
 ### 项目简介
@@ -287,3 +147,145 @@ npm run test:cov
 ### 许可证
 
 MIT License
+
+## English
+
+### Overview
+
+One-click tool to scan, backup, and export AI coding assistant conversations. Supports 26+主流 agents, converts data to Markdown/JSON/training formats for AI training and cross-tool migration.
+
+### Features
+
+- **Multi-Source Scanning**: Automatically discover and scan AI coding tool data from multiple sources
+- **Format Recognition**: Intelligent identification of various data formats
+- **Unified Schema**: Export to standardized JSON format with consistent structure
+- **Multiple Export Formats**: 
+  - JSON / JSONL for machine processing
+  - Markdown for human-readable documentation
+  - Training data formats (SFT, ShareGPT)
+- **Import Functionality**: Import data into specific AI coding agents
+- **Web Interface**: User-friendly web UI for easy operation
+- **Real-time Progress**: Live scanning progress with SSE updates
+
+### Supported AI Coding Tools
+
+| Tool | Directory | Status |
+|------|-----------|--------|
+| Cursor | `.cursor/` | ✅ |
+| Claude Code | `.claude/` | ✅ |
+| OpenCode/Codex | `.opencode/`, `.codex/` | ✅ |
+| Antigravity | `.antigravity/` | ✅ |
+| Cline | `.cline/` | ✅ |
+| Windsurf | `.windsurf/` | ✅ |
+| CodeBuddy | `.codebuddy/` | ✅ |
+| Kiro | `.kiro/` | ✅ |
+| iFlow | `.iflow/` | ✅ |
+| Qoder | `.qoder/` | ✅ |
+| Trae | `.trae/` | ✅ |
+| Augment | `.augment/` | ✅ |
+| Zed | `.zed/` | ✅ |
+| Aider | `.aider/` | ✅ |
+| Continue | `.continue/` | ✅ |
+| GitHub Copilot | `.github/copilot/` | ✅ |
+| Tabnine | `.tabnine/` | ✅ |
+| Amazon Q | `.aws/amazonq/` | ✅ |
+| DeepSeek | `.deepseek/` | ✅ |
+| 通义灵码 | `.tongyi/` | ✅ |
+| 讯飞 iFlyCode | `.iflycode/` | ✅ |
+| Fitten Code | `.fitten/` | ✅ |
+| Devin | `.devin/` | ✅ |
+| Replit | `.replit/` | ✅ |
+| Lovable/Bolt/v0 | `.lovable/`, `.bolt/`, `.v0/` | ✅ |
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/your-repo/ai-exporter.git
+cd ai-exporter
+
+# Install dependencies
+npm install
+```
+
+### Usage
+
+#### Command Line Interface
+
+```bash
+# Scan all supported tools
+node index.js scan
+
+# Export data
+node index.js export
+
+# Start web server
+node open-viewer.js
+npm run serve
+```
+
+#### Web Interface
+
+1. Start the web server:
+   ```bash
+   node open-viewer.js
+   ```
+2. Open your browser to `http://127.0.0.1:8080`
+3. Use the web UI to:
+   - Select workspace and scan
+   - Preview data
+   - Export in various formats
+   - Import data to specific agents
+
+### Configuration
+
+Default storage locations by platform (macOS):
+
+- **Data Output**: `./agent-backup/`
+- **Web Server**: `http://127.0.0.1:8080`
+
+### Project Structure
+
+```
+AI-exporter/
+├── core/               # Core scanning and processing logic
+│   ├── scan.js        # Multi-source scanning
+│   ├── normalize.js   # Data normalization
+│   ├── convert.js     # Format conversion
+│   └── import.js      # Agent-specific import
+├── src/               # CLI and server
+│   ├── server/       # Express server with REST API
+│   └── cli.js        # Command line interface
+├── viewer/            # Web UI
+├── tests/             # Unit tests
+└── adapter/           # Format adapters
+```
+
+### API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/health` | Health check |
+| POST | `/api/scan` | Start scanning |
+| GET | `/api/scan/status` | Scan status |
+| POST | `/api/export` | Export data |
+| POST | `/api/import-file` | Import file |
+| POST | `/api/import-to-agent` | Import to agent |
+| GET | `/api/agents` | List supported agents |
+| GET | `/api/stats` | Statistics |
+
+### Development
+
+```bash
+# Run tests
+npm test
+
+# Run with coverage
+npm run test:cov
+```
+
+### License
+
+MIT License
+
+---
