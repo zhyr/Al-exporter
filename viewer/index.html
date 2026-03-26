@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Exporter</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f1f3f8; color: #1a1a2e; min-height: 100vh; display: flex; }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 260px; min-height: 100vh; background: #fff;
+      border-right: 1px solid #e5e7ef; display: flex; flex-direction: column;
+      padding: 0; flex-shrink: 0;
+    }
+
+    .sidebar-logo {
+      display: flex; align-items: center; gap: 10px;
+      padding: 18px 20px; border-bottom: 1px solid #e5e7ef;
+    }
+    .logo-icon {
+      width: 32px; height: 32px; background: #4f46e5;
+      border-radius: 8px; display: flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: 700; font-size: 14px;
+    }
+    .sidebar-logo span { font-size: 15px; font-weight: 700; color: #1a1a2e; }
+    .search-wrap { padding: 14px 16px; border-bottom: 1px solid #e5e7ef; }
+    .search-wrap input {
+      width: 100%; padding: 8px 12px; border: 1px solid #dde0ea;
+      border-radius: 8px; font-size: 13px; background: #f7f8fc; color: #1a1a2e;
+      outline: none;
+    }
+    .search-wrap input:focus { border-color: #4f46e5; background: #fff; }
+    .sidebar-label { padding: 12px 16px 6px; font-size: 11px; font-weight: 600; color: #9ca3b0; text-transform: uppercase; letter-spacing: .6px; }
+    .tool-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 9px 12px; cursor: pointer; font-size: 13.5px; font-weight: 500;
+      color: #4b5563; border-radius: 0; transition: background .12s;
+      border: none; background: none; width: 100%; text-align: left;
+      border-radius: 10px;
+    }
+    .tool-item:hover { background: #f3f4f8; }
+    .tool-item.active {
+      background: #eef0fd;
+      color: #4f46e5;
+      font-weight: 600;
+      box-shadow: inset 0 0 0 1px rgba(79,70,229,.35);
+    }
+    .tool-item .count {
+      background: #e8eaf6; color: #4f46e5; font-size: 11px; font-weight: 700;
+      padding: 2px 7px; border-radius: 12px; min-width: 26px; text-align: center;
+    }
+    .tool-item.active .count { background: #4f46e5; color: #fff; }
+
+    /* ── Main ── */
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .topbar {
+      background: #fff; border-bottom: 1px solid #e5e7ef;
+      padding: 16px 28px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .topbar h1 { font-size: 20px; font-weight: 700; color: #1a1a2e; }
+    .topbar-right { display: flex; align-items: center; gap: 12px; flex-wrap: nowrap; flex-shrink: 0; }
+    .result-count { font-size: 13px; color: #6b7280; }
+    .btn-export {
+      display: flex; align-items: center; gap: 6px;
+      background: #4f46e5; color: #fff; border: none;
+      padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: background .15s;
+    }
+    .btn-export:hover { background: #4338ca; }
+    .content { flex: 1; overflow-y: auto; padding: 24px 28px; }
+
+    /* ── Overview stats ── */
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .stat-card {
+      background: #fff; border: 1px solid #e5e7ef; border-radius: 12px;
+      padding: 18px 20px; position: relative;
+    }
+    .stat-card .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .6px; color: #9ca3b0; margin-bottom: 8px; }
+    .stat-card .value { font-size: 26px; font-weight: 700; color: #4f46e5; line-height: 1; }
+    .stat-card .icon { position: absolute; top: 16px; right: 16px; font-size: 20px; }
+
+    /* ── Per-tool cards (overview) ── */
+    .tool-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .tool-card {
+      background: #fff; border: 1px solid #e5e7ef; border-radius: 12px;
+      padding: 18px 20px; cursor: pointer; transition: border-color .15s, box-shadow .15s;
+    }
+    .tool-card:hover { border-color: #4f46e5; box-shadow: 0 2px 12px rgba(79,70,229,.12); }
+    .tool-card .tool-name { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: #4f46e5; margin-bottom: 12px; }
+    .tool-stat-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 8px; }
+    .ts-item .ts-label { font-size: 11px; color: #9ca3b0; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 2px; }
+    .ts-item .ts-val { font-size: 20px; font-weight: 700; color: #1a1a2e; }
+
+    /* ── Thread cards (conversation view) ── */
+    .cards-grid { display: flex; flex-direction: column; gap: 12px; }
+    .thread-card {
+      background: #fff; border: 1px solid #e5e7ef; border-radius: 12px;
+      padding: 14px 16px; cursor: pointer; transition: border-color .15s, box-shadow .15s;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .thread-card:hover { border-color: #4f46e5; border-width: 2px; box-shadow: 0 2px 10px rgba(79,70,229,.1); }
+    .card-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+    .tag {
+      padding: 3px 8px; border-radius: 5px; font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .4px;
+    }
+    .tag-source-cursor        { background: #eef0fd; color: #4f46e5; }
+    .tag-source-antigravity   { background: #f3e8ff; color: #7c3aed; }
+    .tag-source-claude_code   { background: #fef3c7; color: #d97706; }
+    .tag-source-codex         { background: #d1fae5; color: #059669; }
+    .tag-source-augment       { background: #dbeafe; color: #2563eb; }
+    .tag-source-windsurf      { background: #ffe4e6; color: #e11d48; }
+    .tag-source-vscode_copilot{ background: #e0f2fe; color: #0284c7; }
+    .tag-source-qoder         { background: #fce7f3; color: #9d174d; }
+    .tag-source-trae          { background: #ecfdf5; color: #065f46; }
+    .tag-source-codebuddy     { background: #fff7ed; color: #c2410c; }
+    .tag-source-iflow         { background: #f0fdf4; color: #16a34a; }
+    .tag-source-cline         { background: #ecfeff; color: #0e7490; }
+    .tag-source-zed           { background: #f3f4f6; color: #111827; }
+    .tag-source-kiro          { background: #fdf4ff; color: #a21caf; }
+    .tag-source-unknown       { background: #f3f4f6; color: #6b7280; }
+    .tag-type { background: #fff7ed; color: #9a3412; }
+    .tag-tokens { background: #f8f9fa; color: #6b7280; font-weight: 500; margin-left: auto; }
+    .card-title { font-size: 13.5px; font-weight: 600; color: #1a1a2e; line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .card-path  { font-size: 11px; color: #9ca3b0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .card-date  { font-size: 11px; color: #b0b7c3; }
+
+    /* ── Detail slide-over ── */
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.18); z-index: 100; display: none; }
+    .overlay.open { display: block; }
+    .detail {
+      position: fixed; top: 0; right: 0; bottom: 0; width: 560px; max-width: 90vw;
+      background: #fff; box-shadow: -4px 0 24px rgba(0,0,0,.12);
+      z-index: 101; display: flex; flex-direction: column;
+      transform: translateX(100%); transition: transform .25s ease;
+    }
+    .detail.open { transform: none; }
+    .detail-header { padding: 18px 20px; border-bottom: 1px solid #e5e7ef; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .detail-header h2 { font-size: 15px; font-weight: 700; line-height: 1.4; flex: 1; }
+    .detail-meta { font-size: 12px; color: #9ca3b0; margin-top: 4px; }
+    .btn-close { background: none; border: 1px solid #e5e7ef; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 14px; color: #6b7280; flex-shrink: 0; }
+    .btn-close:hover { border-color: #4f46e5; color: #4f46e5; }
+    .detail-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+    .msg { margin-bottom: 12px; border-radius: 8px; padding: 10px 14px; font-size: 13px; line-height: 1.6; }
+    .msg-user      { background: #eef0fd; border-left: 3px solid #4f46e5; }
+    .msg-assistant { background: #f9fafb; border-left: 3px solid #9ca3b0; }
+    .msg-system    { background: #fafafa; border-left: 3px solid #e5e7ef; font-size: 12px; color: #9ca3b0; }
+    .msg-role { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: #9ca3b0; margin-bottom: 5px; }
+    .msg-user .msg-role { color: #4f46e5; }
+    .msg pre { background: #1e1e2e; color: #cdd6f4; padding: 10px 12px; border-radius: 6px; overflow-x: auto; margin-top: 8px; font-size: 12px; font-family: 'JetBrains Mono', monospace; }
+
+    /* ── Empty ── */
+    .empty { text-align: center; padding: 60px 20px; color: #9ca3b0; }
+    .empty .em { font-size: 40px; margin-bottom: 12px; }
+
+    /* ── Settings Modal ── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 200;
+      display: none; align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: #fff; border-radius: 12px; padding: 24px; width: 420px; max-width: 90vw;
+      box-shadow: 0 8px 32px rgba(0,0,0,.2);
+    }
+    .modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+    .modal-row { margin-bottom: 16px; }
+    .modal-row label { display: block; font-size: 13px; font-weight: 600; color: #6b7280; margin-bottom: 6px; }
+    .modal-row input {
+      width: 100%; padding: 10px 12px; border: 1px solid #dde0ea; border-radius: 8px;
+      font-size: 13px; outline: none;
+    }
+    .modal-row input:focus { border-color: #4f46e5; }
+    .modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px; }
+    .modal-actions button {
+      padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .btn-cancel { background: #f3f4f6; border: 1px solid #e5e7ef; color: #6b7280; }
+    .btn-cancel:hover { background: #e5e7ef; }
+    .btn-save { background: #4f46e5; border: none; color: #fff; }
+    .btn-save:hover { background: #4338ca; }
+  </style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">01</div>
+    <span>AI Exporter</span>
+  </div>
+
+  <div class="search-wrap">
+    <input id="search" type="text" placeholder="Search prompts..." oninput="applyFilter()" />
+  </div>
+  <div class="sidebar-label">Filter by tool</div>
+  <div id="tool-list"></div>
+</aside>
+
+<!-- Main -->
+<div class="main">
+  <div class="topbar">
+    <h1 id="page-title">System Overview</h1>
+    <div class="topbar-right">
+      <span class="result-count" id="result-count"></span>
+      <span id="last-scan-time" style="font-size:12px;color:#9ca3b0;margin-right:8px;"></span>
+      <button class="btn-export" style="background:#7c3aed; margin-right:8px;" id="btn-import" onclick="openImport()">↓ Import</button>
+      <button class="btn-export" style="background:#059669; margin-right:8px;" id="btn-scan" onclick="triggerScan(true)">增量扫描</button>
+      <button class="btn-export" id="btn-settings" onclick="openSettings()">⚙ 设置</button>
+      <button class="btn-export" id="btn-export-all" onclick="exportAll()">⬆ Export All</button>
+    </div>
+  </div>
+  <div class="content" id="content"></div>
+</div>
+
+<!-- Detail slide-over -->
+<div class="overlay" id="overlay" onclick="closeDetail()"></div>
+<div class="detail" id="detail">
+  <div class="detail-header">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+      <h2 id="d-title" style="margin:0; font-size:18px; color:#111827;"></h2>
+      <button class="btn-close" onclick="closeDetail()">✕</button>
+    </div>
+    <div class="detail-meta" id="d-meta" style="margin-bottom:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
+    <div id="d-actions" style="display:flex; gap:8px; flex-wrap:nowrap; flex-shrink:0;">
+      <button onclick="copyCurrentThread()" class="btn-export" style="background:#f3f4f6; color:#111827; border:1px solid #e5e7eb; white-space:nowrap;">Copy</button>
+      <button onclick="exportCurrentThread()" class="btn-export" style="background:#0ea5e9; white-space:nowrap;">Export JSON</button>
+    </div>
+  </div>
+  <div class="detail-body" id="d-body"></div>
+</div>
+
+
+
+<!-- Application Logic -->
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let records = [];
+let enriched = []; // record with token split
+let globalStats = null;
+let groupStats = []; // [{ source, threads, tokens, userTokens, aiTokens, avg... }]
+let activeSource = null; // null = all tools
+let searchTimeout = null;
+let displayLimit = 18;
+let isScanning = false;
+let currentDetailRecord = null;
+let currentDetailIdx = -1;
+
+// ── Init ────────────────────────────────────────────────────────────────────
+const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:8080' : '';
+
+async function triggerScan(isManualRefresh = false) {
+  if (isScanning) return [];
+  isScanning = true;
+  
+  const btn = document.getElementById('btn-scan');
+  if (btn) btn.innerHTML = '扫描中...';
+  
+  if (!isManualRefresh) {
+    document.getElementById('tool-list').innerHTML = '<div style="padding: 16px; color: #9ca3b0; font-size: 13px;">Scanning...</div>';
+    document.getElementById('content').innerHTML = `
+      <div class="empty">
+        <div class="em">⏳</div>
+        <p id="scan-status-text">Starting incremental scan...</p>
+      </div>
+    `;
+  }
+
+  try {
+    const scanBody = JSON.stringify({ dataDir: settings.dataDir });
+    const res = await fetch(`${API_BASE}/api/scan`, { method: 'POST', body: scanBody, headers: { 'Content-Type': 'application/json' } });
+    const { job_id } = await res.json();
+    
+    return new Promise((resolve) => {
+      const sse = new EventSource(`${API_BASE}/api/jobs/${job_id}/events`);
+      let realtimeData = []; // 累计实时数据
+      
+      sse.onmessage = async (e) => {
+        const data = JSON.parse(e.data);
+        const el = document.getElementById('scan-status-text');
+        
+        // 显示阶段信息
+        if (data.phase && data.depth) {
+          const phaseInfo = `[阶段${data.phase}/4 深度${data.depth}]`;
+          const foundInfo = data.totalFound ? ` 已找到 ${data.totalFound} 条` : '';
+          const msg = data.message || '';
+          
+          if (el) el.textContent = `${phaseInfo}${foundInfo} ${msg}`;
+          if (btn && isManualRefresh) {
+            btn.innerHTML = `⏳ ${data.progress || 0}%`;
+          }
+        } else {
+          if (el) el.textContent = `[${data.progress||0}%] ${data.message || 'Scanning...'}`;
+          if (btn && isManualRefresh) {
+            btn.innerHTML = `⏳ ${data.progress||0}%`;
+          }
+        }
+        
+        // 实时更新数据 (如果有 realtimeRecords)
+        if (data.realtimeRecords && data.realtimeRecords.length > 0) {
+          realtimeData.push(...data.realtimeRecords);
+          
+          // 如果是手动刷新，实时显示新数据
+          if (isManualRefresh) {
+            // 去重并更新显示
+            const unique = new Map();
+            for (const r of [...records, ...realtimeData]) {
+              if (!unique.has(r.thread_id)) {
+                unique.set(r.thread_id, r);
+              }
+            }
+            records = Array.from(unique.values());
+            enriched = records.map(r => enrichRecord(r));
+            globalStats = computeGlobalStats(enriched);
+            groupStats = computeGroupStats(enriched);
+            renderSidebar();
+            renderContent();
+          }
+        }
+        
+        if (data.status === 'done') {
+          sse.close();
+          const jobRes = await fetch(`${API_BASE}/api/jobs/${job_id}`);
+          const jobData = await jobRes.json();
+          let newRecords = jobData.result?.records || [];
+          
+          isScanning = false;
+          if (btn) btn.innerHTML = '增量扫描';
+          
+          // 更新最后扫描时间
+          const now = new Date();
+          const timeStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+          document.getElementById('last-scan-time').textContent = '上次: ' + timeStr;
+          
+          if (isManualRefresh) {
+            // Deduplicate scanned records to fix DB bloating
+            const unique = new Map();
+            for (const r of newRecords) {
+              if (!unique.has(r.thread_id)) {
+                unique.set(r.thread_id, r);
+              } else {
+                const existing = unique.get(r.thread_id);
+                const oldLen = existing.messages?.length || 0;
+                const newLen = r.messages?.length || 0;
+                // Prefer the one with more messages or newer timestamp
+                if (newLen > oldLen || (!existing.updated_at && r.updated_at)) {
+                  unique.set(r.thread_id, r);
+                }
+              }
+            }
+            records = Array.from(unique.values());
+            enriched = records.map((r) => enrichRecord(r));
+            globalStats = computeGlobalStats(enriched);
+            groupStats = computeGroupStats(enriched);
+            renderSidebar();
+            renderContent();
+          }
+          resolve(newRecords);
+        } else if (data.status === 'failed') {
+          sse.close();
+          if (!isManualRefresh && el) el.textContent = 'Scan failed: ' + (data.error || 'Unknown error');
+          isScanning = false;
+          if (btn) btn.innerHTML = '增量扫描';
+          resolve([]);
+        }
+      };
+      sse.onerror = (e) => {
+        console.log('SSE error:', e);
+        sse.close();
+        isScanning = false;
+        if (btn) btn.innerHTML = '增量扫描';
+        resolve([]);
+      };
+    });
+  } catch (err) {
+    const el = document.getElementById('scan-status-text');
+    if (!isManualRefresh && el) el.textContent = 'Failed to connect: ' + err.message;
+    isScanning = false;
+    if (btn) btn.innerHTML = '增量扫描';
+    return [];
+  }
+}
+
+async function init() {
+  // 先加载设置
+  await loadSettings();
+  
+  // 只从本地加载数据，不自动触发扫描
+  let statsData = null;
+  try {
+    const statsRes = await fetch(`${API_BASE}/api/stats`, { method: 'POST', body: JSON.stringify({}) });
+    if (statsRes.ok) {
+      statsData = await statsRes.json();
+    }
+  } catch (e) { 
+    console.warn('stats fetch failed', e); 
+  }
+
+  if (!statsData || statsData.totalThreads === 0) {
+    document.getElementById('tool-list').innerHTML = '<div style="padding: 16px; color: #9ca3b0; font-size: 13px;">No data found.</div>';
+    document.getElementById('content').innerHTML = `<div class="empty"><div class="em">📭</div><p>Click "增量扫描" to scan and import your AI agent data.</p></div>`;
+    return;
+  }
+
+  // 加载所有记录用于显示
+  try {
+    const allRes = await fetch(`${API_BASE}/api/threads?size=1000`);
+    if (!allRes.ok) throw new Error('Failed to load threads');
+    const data = await allRes.json();
+    records = data.items || data || [];
+  } catch (e) {
+    console.error('load threads failed', e);
+    document.getElementById('content').innerHTML = `<div class="empty"><div class="em">⚠️</div><p>Failed to load data. Make sure server is running.</p></div>`;
+    return;
+  }
+
+  enriched = records.map((r) => enrichRecord(r));
+  globalStats = computeGlobalStats(enriched);
+  groupStats = computeGroupStats(enriched);
+
+  renderSidebar();
+  renderContent();
+}
+
+/** Sidebar label: Cursor, Antigravity, Cline, … (matches overview.png order) */
+function toolDisplayName(source) {
+  return capitalize(String(source || "unknown").replace(/_/g, " "));
+}
+
+function sortGroupsByName(groups) {
+  return [...groups].sort((a, b) =>
+    toolDisplayName(a.source).localeCompare(toolDisplayName(b.source), "en", { sensitivity: "base" })
+  );
+}
+
+
+
+// ── Token helpers ────────────────────────────────────────────────────────────
+function estimateTokens(text = "") {
+  const cjk = (text.match(/[\u4e00-\u9fff\u3040-\u30ff]/g) || []).length;
+  const latin = text.length - cjk;
+  return Math.ceil(cjk + latin / 4);
+}
+
+function enrichRecord(r) {
+  const messages = Array.isArray(r.messages) ? r.messages : [];
+  const totalTokens = typeof r.meta?.tokens === "number" ? r.meta.tokens : estimateTokens(messages.map(m => m.content || "").join(""));
+
+  let userEst = 0;
+  let aiEst = 0;
+  for (const m of messages) {
+    const role = m?.role;
+    const content = m?.content || "";
+    const est = estimateTokens(content);
+    if (role === "user") userEst += est;
+    else aiEst += est; // assistant/system/tool => AI side
+  }
+
+  const totalEst = userEst + aiEst;
+  let userTokens = 0;
+  let aiTokens = totalTokens;
+  if (totalEst > 0) {
+    aiTokens = totalTokens * (aiEst / totalEst);
+    userTokens = totalTokens * (userEst / totalEst);
+  }
+
+  return { ...r, __userTokens: userTokens, __aiTokens: aiTokens, __totalTokens: totalTokens };
+}
+
+function computeGlobalStats(items) {
+  const totalThreads = items.length;
+  let totalTokens = 0;
+  let totalMessages = 0;
+  let userTokens = 0;
+  let aiTokens = 0;
+  let maxUser = 0;
+  let maxAi = 0;
+
+  for (const r of items) {
+    totalTokens += r.__totalTokens || 0;
+    totalMessages += (r.messages?.length || 0);
+    userTokens += r.__userTokens || 0;
+    aiTokens += r.__aiTokens || 0;
+    maxUser = Math.max(maxUser, r.__userTokens || 0);
+    maxAi = Math.max(maxAi, r.__aiTokens || 0);
+  }
+
+  return {
+    totalThreads,
+    totalTokens,
+    totalMessages,
+    userTokens,
+    aiTokens,
+    maxUser,
+    maxAi,
+  };
+}
+
+function computeGroupStats(items) {
+  const map = new Map();
+
+  for (const r of items) {
+    const source = r.meta?.source || "unknown";
+    if (!map.has(source)) map.set(source, { source, threads: 0, tokens: 0, userTokens: 0, aiTokens: 0 });
+    const g = map.get(source);
+    g.threads += 1;
+    g.tokens += r.__totalTokens || 0;
+    g.userTokens += r.__userTokens || 0;
+    g.aiTokens += r.__aiTokens || 0;
+  }
+
+  const list = [...map.values()].map((g) => ({
+    ...g,
+    avgUser: g.threads ? Math.round(g.userTokens / g.threads) : 0,
+    avgAi: g.threads ? Math.round(g.aiTokens / g.threads) : 0,
+  }));
+
+  return list;
+}
+
+// ── Navigation ──────────────────────────────────────────────────────────────
+function selectTool(source) {
+  activeSource = source;
+  document.getElementById('search').value = '';
+  renderSidebar();
+  renderContent();
+}
+
+// ── Sidebar ───────────────────────────────────────────────────────────────────
+function renderSidebar() {
+  const toolList = document.getElementById('tool-list');
+  const groups = sortGroupsByName(groupStats || []);
+
+  const allThreads = globalStats?.totalThreads || 0;
+  const allBtn = `<button class="tool-item${activeSource === null ? ' active' : ''}" onclick="selectTool(null)">
+    <span>All Tools</span>
+    <span class="count">${allThreads}</span>
+  </button>`;
+
+  const toolBtns = groups.map((g) => {
+    const src = g.source;
+    return `<button class="tool-item${activeSource === src ? ' active' : ''}" onclick="selectTool('${src}')">
+      <span>${toolDisplayName(src)}</span>
+      <span class="count">${g.threads}</span>
+    </button>`;
+  }).join('');
+
+  toolList.innerHTML = allBtn + toolBtns;
+}
+
+// ── Main Content ─────────────────────────────────────────────────────────────
+function renderContent() {
+  const q = document.getElementById('search').value.trim().toLowerCase();
+
+  if (activeSource === null && !q) {
+    document.getElementById('page-title').textContent = 'System Overview';
+    document.getElementById('result-count').textContent = '';
+    renderOverview();
+    return;
+  }
+
+  const title = activeSource ? toolDisplayName(activeSource) : 'All Conversations';
+  document.getElementById('page-title').textContent = title;
+
+  let filtered = enriched;
+  if (activeSource) filtered = filtered.filter((r) => (r.meta?.source || "unknown") === activeSource);
+  
+  if (q) {
+    filtered = filtered.map(r => {
+      let score = 0;
+      const p = (r.meta?.prompt || "").toLowerCase();
+      const fp = (r.meta?.file_path || "").toLowerCase();
+      const proj = (r.meta?.project || "").toLowerCase();
+      
+      if (p.includes(q)) score += 10;
+      if (fp.includes(q)) score += 5;
+      if (proj.includes(q)) score += 3;
+      
+      // Deep search in all messages
+      if (r.messages) {
+        for (const m of r.messages) {
+          const c = (m.content || "").toLowerCase();
+          let idx = c.indexOf(q);
+          while (idx !== -1) {
+            score += 1;
+            idx = c.indexOf(q, idx + q.length);
+          }
+        }
+      }
+      
+      return { ...r, __score: score };
+    }).filter(r => r.__score > 0);
+
+    // Sort by relevance (desc) then by time (desc)
+    filtered.sort((a, b) => {
+      if (b.__score !== a.__score) return b.__score - a.__score;
+      const timeA = new Date(a.meta?.created_at || a.updated_at || 0).getTime();
+      const timeB = new Date(b.meta?.created_at || b.updated_at || 0).getTime();
+      return timeB - timeA;
+    });
+  } else {
+    // Default sort by time desc
+    filtered.sort((a, b) => {
+      const timeA = new Date(a.meta?.created_at || a.updated_at || 0).getTime();
+      const timeB = new Date(b.meta?.created_at || b.updated_at || 0).getTime();
+      return timeB - timeA;
+    });
+  }
+
+  const visible = filtered.slice(0, displayLimit);
+  document.getElementById('result-count').textContent = `Showing ${visible.length} results`;
+  renderCards(visible);
+}
+
+function applyFilter() {
+  if (searchTimeout) clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    renderContent();
+  }, 200);
+}
+
+// ── Overview ────────────────────────────────────────────────────────────────
+function renderOverview() {
+  if (!globalStats || globalStats.totalThreads === 0) {
+    document.getElementById('content').innerHTML = `<div class="empty"><div class="em">📭</div><p>No backup data found.</p></div>`;
+    return;
+  }
+
+  const { totalTokens, totalThreads, totalMessages, userTokens, aiTokens, maxUser, maxAi } = globalStats;
+  const avgUser = totalThreads ? Math.round(userTokens / totalThreads) : 0;
+  const avgAi = totalThreads ? Math.round(aiTokens / totalThreads) : 0;
+  const density = totalThreads ? (totalMessages / totalThreads).toFixed(1) : "0.0";
+
+  const statsHTML = `<div class="stats-grid">
+    <div class="stat-card"><div class="icon">🔥</div><div class="label">Total Tokens</div><div class="value">${fmtNum(totalTokens)}</div></div>
+    <div class="stat-card"><div class="icon">🗂</div><div class="label">Total Threads</div><div class="value">${totalThreads.toLocaleString()}</div></div>
+    <div class="stat-card"><div class="icon">💬</div><div class="label">Total Messages</div><div class="value">${totalMessages.toLocaleString()}</div></div>
+    <div class="stat-card"><div class="icon">👤</div><div class="label">Avg User Token</div><div class="value">${fmtNum(avgUser)}</div></div>
+    <div class="stat-card"><div class="icon">📌</div><div class="label">Max User Token</div><div class="value">${fmtNum(Math.round(maxUser))}</div></div>
+    <div class="stat-card"><div class="icon">🤖</div><div class="label">Avg AI Token</div><div class="value">${fmtNum(avgAi)}</div></div>
+    <div class="stat-card"><div class="icon">⚡</div><div class="label">Max AI Token</div><div class="value">${fmtNum(Math.round(maxAi))}</div></div>
+    <div class="stat-card"><div class="icon">📈</div><div class="label">Density</div><div class="value">${density} msg/convo</div></div>
+  </div>`;
+
+  const toolCardsHTML = `<div class="tool-cards">` + sortGroupsByName(groupStats).map((g) => {
+    if (activeSource && g.source !== activeSource) return "";
+    return `<div class="tool-card" onclick="selectTool('${g.source}')">
+      <div class="tool-name">${g.source.toUpperCase().replace(/_/g,' ')}</div>
+      <div class="tool-stat-pair">
+        <div class="ts-item"><div class="ts-label">Threads</div><div class="ts-val">${g.threads.toLocaleString()}</div></div>
+        <div class="ts-item"><div class="ts-label">Tokens</div><div class="ts-val">~${fmtNum(Math.round(g.tokens))}</div></div>
+      </div>
+      <div class="tool-stat-pair">
+        <div class="ts-item"><div class="ts-label">Avg User</div><div class="ts-val">${fmtNum(g.avgUser)}</div></div>
+        <div class="ts-item"><div class="ts-label">Avg AI</div><div class="ts-val">${fmtNum(g.avgAi)}</div></div>
+      </div>
+    </div>`;
+  }).join('') + `</div>`;
+
+  document.getElementById('content').innerHTML = statsHTML + toolCardsHTML;
+}
+
+// ── Thread Cards ────────────────────────────────────────────────────────────
+let currentVisible = [];
+function renderCards(recordsVisible) {
+  currentVisible = recordsVisible || [];
+  if (currentVisible.length === 0) {
+    document.getElementById('content').innerHTML = `<div class="empty"><div class="em">🔍</div>No results found.</div>`;
+    return;
+  }
+
+  const html = `<div class="cards-grid">` + currentVisible.map((r, i) => {
+    const src    = r.meta?.source || 'unknown';
+    const type   = (r.type || 'thread').toUpperCase();
+    const tokens = r.meta?.tokens || 0;
+    const prompt = escHtml(r.meta?.prompt || r.thread_id || 'Untitled');
+    const filePath = escHtml(r.meta?.file_path || '');
+    const dateStr = formatThreadTime(r.meta?.created_at || r.updated_at);
+
+    return `<div class="thread-card" onclick="openDetail(${i})">
+      <div class="card-tags">
+        <span class="tag tag-source-${src}">${src.replace(/_/g,' ')}</span>
+        <span class="tag tag-type">${type}</span>
+        <span class="tag tag-tokens">~${fmtNum(tokens)} tokens</span>
+      </div>
+      <div class="card-title">${prompt}</div>
+      <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-top:auto; padding-top:10px;">
+        ${filePath ? `<div class="card-path" style="flex:1; margin-right:8px;">${filePath}</div>` : '<div></div>'}
+        ${dateStr ? `<div class="card-date" style="font-size:11px; color:#9ca3b0; flex-shrink:0;">${dateStr}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('') + `</div>`;
+  document.getElementById('content').innerHTML = html;
+}
+
+// ── Detail slide-over ────────────────────────────────────────────────────────
+function openDetail(idx) {
+  const r = currentVisible[idx];
+  if (!r) return;
+  currentDetailRecord = r;
+
+  document.getElementById('d-title').textContent = r.meta?.prompt || r.thread_id || 'Thread';
+  document.getElementById('d-meta').innerHTML = `
+    Source: <b>${r.meta?.source||'unknown'}</b> &nbsp;|&nbsp; 
+    Tokens: ~<b>${fmtNum(r.meta?.tokens||0)}</b> &nbsp;|&nbsp; 
+    Project: <b>${r.meta?.project||'unknown'}</b>
+    <div style="margin-top:4px;">ID: ${r.thread_id||''}</div>
+    <div style="margin-top:4px;word-break:break-all;">File: ${r.meta?.file_path||'N/A'}</div>
+  `;
+
+  const msgs = (r.messages || []).map(m => {
+    const cls = m.role === 'user' ? 'msg-user' : m.role === 'assistant' ? 'msg-assistant' : 'msg-system';
+    const content = renderMarkdown(m.content);
+    return `<div class="msg ${cls}"><div class="msg-role">${m.role}</div><div>${content}</div></div>`;
+  }).join('');
+
+  document.getElementById('d-body').innerHTML = msgs || '<p style="color:#9ca3b0;font-size:13px">No messages.</p>';
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('detail').classList.add('open');
+}
+
+function closeDetail() {
+  currentDetailRecord = null;
+  document.getElementById('overlay').classList.remove('open');
+  document.getElementById('detail').classList.remove('open');
+}
+
+// ── Utils ──────────────────────────────────────────────────────────────────────
+function formatThreadTime(isoString) {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return '';
+  
+  const now = new Date();
+  const diffMs = now - d;
+  const diffHours = diffMs / (1000 * 60 * 60);
+  
+  const pad = (n) => String(n).padStart(2, '0');
+  const YYYY = d.getFullYear();
+  const MM = pad(d.getMonth() + 1);
+  const DD = pad(d.getDate());
+  const HH = pad(d.getHours());
+  const mm = pad(d.getMinutes());
+  const ss = pad(d.getSeconds());
+  
+  const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  const ww = weekDays[d.getDay()];
+
+  if (now.getFullYear() !== YYYY) {
+    return `${YYYY}/${MM}/${DD}, ${HH}`;
+  }
+  
+  // Future dates fallback
+  if (diffHours < 0) return `${MM}/${DD}`;
+
+  if (diffHours <= 24) {
+    return `${HH}:${mm}:${ss}`;
+  } else if (diffHours <= 168) {
+    return `${MM}/${DD}, ${ww} ${HH}:${mm}:${ss}`;
+  } else if (diffHours <= 720) {
+    return `${MM}/${DD}, ${HH}:${mm}:${ss}`;
+  } else {
+    return `${MM}/${DD}`;
+  }
+}
+
+function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+function fmtNum(n) {
+  if (!n) return '0';
+  if (n >= 1e6) return (n/1e6).toFixed(1).replace(/\.0$/,'')+'M';
+  if (n >= 1e3) return (n/1e3).toFixed(0)+'K';
+  return String(n);
+}
+function escHtml(s) {
+  return String(s||'').replace(/[&<>'"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' })[c] || c);
+}
+
+function renderMarkdown(text) {
+  if (!text) return "";
+  let html = escHtml(text);
+  // Code blocks: ```language \n code ```
+  html = html.replace(/\`\`\`(.*?)\n([\s\S]*?)\`\`\`/g, '<pre style="background:#1e1e1e; color:#d4d4d4; padding:12px; border-radius:6px; overflow-x:auto;"><code class="language-$1">$2</code></pre>');
+  html = html.replace(/\`\`\`([\s\S]*?)\`\`\`/g, '<pre style="background:#1e1e1e; color:#d4d4d4; padding:12px; border-radius:6px; overflow-x:auto;"><code>$1</code></pre>');
+  // Inline code
+  html = html.replace(/\`([^`\n]+)\`/g, '<code style="background:#f1f5f9; padding:2px 4px; border-radius:4px; color:#ef4444;">$1</code>');
+  // Bold
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  // Newlines
+  html = html.replace(/\n/g, '<br/>');
+  return html;
+}
+
+function copyCurrentThread() {
+  if (!currentDetailRecord) return;
+  const r = currentDetailRecord;
+  const text = (r.messages || []).map(m => `[${m.role.toUpperCase()}]\n${m.content}`).join('\n\n---\n\n');
+  navigator.clipboard.writeText(text).then(() => alert('Thread copied to clipboard!'));
+}
+
+function exportCurrentThread() {
+  if (!currentDetailRecord) return;
+  const r = currentDetailRecord;
+  const blob = new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${r.meta?.source || 'export'}-${r.thread_id || Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportAll() {
+  try {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      records: records,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ai-exporter-export-all.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('Export failed: ' + e.message);
+  }
+}
+
+// ── Settings ───────────────────────────────────────────────────────────────────
+let settings = {
+  dataDir: ''  // 初始为空，从服务器加载
+};
+
+function getDefaultDataDir() {
+  // 尝试从 input 获取用户名，如果不存在则使用默认值
+  const inputEl = document.getElementById('settings-data-dir');
+  const username = inputEl?.value?.split('/')[2] || 'yr.z';
+  return '/Users/' + username + '/Downloads/AI-Exporter';
+}
+
+async function loadSettings() {
+  try {
+    const res = await fetch(`${API_BASE}/api/settings`);
+    if (res.ok) {
+      const data = await res.json();
+      settings.dataDir = data.dataDir || getDefaultDataDir();
+    } else {
+      settings.dataDir = getDefaultDataDir();
+    }
+  } catch (e) {
+    settings.dataDir = getDefaultDataDir();
+    console.warn('loadSettings failed', e);
+  }
+}
+
+function selectFolder() {
+  // 尝试使用 File System Access API
+  if (window.showDirectoryPicker) {
+    window.showDirectoryPicker().then(dir => {
+      // File System Access API 无法获取完整路径，只能获取目录名
+      // 由于安全限制，需要用户手动输入完整路径
+      const inputEl = document.getElementById('settings-data-dir');
+      const userHome = '/Users/' + (inputEl?.value?.split('/')[2] || 'yr.z');
+      const suggestedPath = userHome + '/' + dir.name;
+      
+      // 提示用户确认路径
+      inputEl.value = suggestedPath;
+      alert('已选择目录: ' + dir.name + '\n\n由于浏览器安全限制，请确认完整路径是否为:\n' + suggestedPath + '\n\n如果不对，请手动修改为正确路径。');
+    }).catch(err => {
+      console.log('选择取消或失败', err);
+    });
+  } else {
+    // 兼容方案：让用户手动输入路径
+    alert('您的浏览器不支持目录选择，请直接在下方的输入框中输入完整路径。\n例如: /Users/yr.z/Documents/AI-Exporter');
+  }
+}
+
+function openSettings() {
+  document.getElementById('settings-data-dir').value = settings.dataDir;
+  document.getElementById('settings-modal').classList.add('open');
+}
+
+function closeSettings() {
+  document.getElementById('settings-modal').classList.remove('open');
+}
+
+async function saveSettings() {
+  const newDir = document.getElementById('settings-data-dir').value.trim();
+  if (newDir) {
+    settings.dataDir = newDir;
+    try {
+      await fetch(`${API_BASE}/api/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dataDir: newDir })
+      });
+      alert('设置已保存！请重启服务以使数据目录生效。');
+    } catch (e) {
+      alert('保存失败: ' + e.message);
+    }
+  }
+  closeSettings();
+}
+
+// Fire init
+init();
+
+// ── Import ─────────────────────────────────────────────────────────────────────
+let importFileInput = null;
+let availableAgents = [];
+
+async function openImport() {
+  // 获取支持的 agent 列表
+  try {
+    const res = await fetch(`${API_BASE}/api/agents`);
+    const data = await res.json();
+    availableAgents = data.agents || [];
+  } catch (e) {
+    console.warn('Failed to load agents', e);
+    availableAgents = [];
+  }
+  
+  document.getElementById('import-modal').classList.add('open');
+  renderAgentSelect();
+}
+
+function renderAgentSelect() {
+  const select = document.getElementById('import-target-agent');
+  select.innerHTML = availableAgents.map(a => 
+    `<option value="${a.source}">${a.source}</option>`
+  ).join('');
+}
+
+function closeImport() {
+  document.getElementById('import-modal').classList.remove('open');
+  // 清空文件选择
+  const fileInput = document.getElementById('import-file');
+  if (fileInput) fileInput.value = '';
+  document.getElementById('import-preview').innerHTML = '';
+  document.getElementById('import-status').textContent = '';
+}
+
+async function handleImportFile() {
+  const fileInput = document.getElementById('import-file');
+  const file = fileInput.files?.[0];
+  if (!file) return;
+
+  const preview = document.getElementById('import-preview');
+  const status = document.getElementById('import-status');
+  
+  try {
+    const text = await file.text();
+    let records = [];
+    
+    // 解析文件内容
+    const ext = file.name.toLowerCase();
+    if (ext.endsWith('.jsonl')) {
+      records = text.split('\n').filter(l => l.trim()).map(l => {
+        try { return JSON.parse(l); } catch { return null; }
+      }).filter(Boolean);
+    } else {
+      const parsed = JSON.parse(text);
+      records = Array.isArray(parsed) ? parsed : [parsed];
+    }
+    
+    // 显示预览
+    const previewRecords = records.slice(0, 5);
+    preview.innerHTML = `<div style="font-size:12px;color:#6b7280;margin-bottom:8px;">
+      文件: ${file.name}<br/>
+      总记录数: ${records.length}<br/>
+      前几条预览:
+    </div>
+    <pre style="background:#f3f4f6;padding:8px;border-radius:6px;font-size:11px;max-height:200px;overflow:auto;">
+${previewRecords.map(r => JSON.stringify(r, null, 2)).join('\n\n')}
+    </pre>`;
+    
+    status.textContent = `准备导入 ${records.length} 条记录`;
+    status.style.color = '#059669';
+  } catch (e) {
+    preview.innerHTML = '';
+    status.textContent = '解析文件失败: ' + e.message;
+    status.style.color = '#dc2626';
+  }
+}
+
+async function doImport() {
+  const fileInput = document.getElementById('import-file');
+  const file = fileInput.files?.[0];
+  if (!file) {
+    alert('请先选择文件');
+    return;
+  }
+
+  const targetAgent = document.getElementById('import-target-agent').value;
+  const status = document.getElementById('import-status');
+  status.textContent = '正在解析文件...';
+  status.style.color = '#4f46e5';
+
+  try {
+    // 解析文件内容
+    const text = await file.text();
+    let records = [];
+    const ext = file.name.toLowerCase();
+    
+    if (ext.endsWith('.jsonl')) {
+      records = text.split('\n').filter(l => l.trim()).map(l => {
+        try { return JSON.parse(l); } catch { return null; }
+      }).filter(Boolean);
+    } else {
+      const parsed = JSON.parse(text);
+      records = Array.isArray(parsed) ? parsed : [parsed];
+    }
+
+    status.textContent = `正在导入到 ${targetAgent}...`;
+    
+    // 调用 API 导入到 agent 目录
+    const res = await fetch(`${API_BASE}/api/import-to-agent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ records, source: targetAgent })
+    });
+    
+    if (!res.ok) throw new Error('导入失败');
+    
+    const result = await res.json();
+    status.textContent = `导入完成: ${result.success} 条记录写入 ${result.paths?.length || 0} 个文件`;
+    status.style.color = '#059669';
+    
+    // 显示写入的路径
+    if (result.paths && result.paths.length > 0) {
+      const pathList = result.paths.slice(0, 5).join('\n');
+      const more = result.paths.length > 5 ? `\n...还有 ${result.paths.length - 5} 个` : '';
+      alert(`已写入以下目录:\n${pathList}${more}`);
+    }
+  } catch (e) {
+    status.textContent = '导入失败: ' + e.message;
+    status.style.color = '#dc2626';
+  }
+}
+</script>
+
+<!-- Settings Modal -->
+<div id="settings-modal" class="modal-overlay" onclick="closeSettings()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h3>⚙ 设置</h3>
+    <div class="modal-row">
+      <label>数据保存目录</label>
+      <div style="display: flex; gap: 8px;">
+        <input id="settings-data-dir" type="text" placeholder="./agent-backup" style="flex:1;" />
+        <button onclick="selectFolder()" style="padding: 8px 12px; border: 1px solid #dde0ea; border-radius: 8px; background: #f3f4f6; cursor: pointer;">📁 选择</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeSettings()">取消</button>
+      <button class="btn-save" onclick="saveSettings()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import Modal -->
+<div id="import-modal" class="modal-overlay" onclick="closeImport()">
+  <div class="modal" style="width:500px;max-width:90vw;" onclick="event.stopPropagation()">
+    <h3>↓ 导入到 Agent</h3>
+    <div class="modal-row">
+      <label>目标 Agent</label>
+      <select id="import-target-agent" style="width:100%;padding:10px;border:1px solid #dde0ea;border-radius:8px;font-size:13px;">
+        <option value="">加载中...</option>
+      </select>
+    </div>
+    <div class="modal-row">
+      <label>选择文件 (JSON/JSONL)</label>
+      <input id="import-file" type="file" accept=".json,.jsonl" onchange="handleImportFile()" style="padding:8px;" />
+    </div>
+    <div id="import-preview" style="margin:12px 0;"></div>
+    <div id="import-status" style="font-size:13px;margin-bottom:12px;"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeImport()">取消</button>
+      <button class="btn-save" onclick="doImport()" style="background:#7c3aed;">导入到 Agent</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>

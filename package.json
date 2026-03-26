@@ -1,0 +1,45 @@
+{
+  "name": "ai-exporter",
+  "version": "2.0.0",
+  "type": "module",
+  "description": "Scan, backup, export and analyze conversations from AI coding tools (Cursor, Claude Code, Codex, and more)",
+  "main": "src/cli.js",
+  "bin": {
+    "ai-exporter": "src/cli.js",
+    "aex": "src/cli.js"
+  },
+  "scripts": {
+    "start":    "node src/cli.js export",
+    "serve":    "node src/cli.js serve",
+    "scan":     "node src/cli.js scan",
+    "export":   "node src/cli.js export",
+    "test":     "node --test tests/**/*.test.js",
+    "test:cov": "c8 node --test tests/**/*.test.js"
+  },
+  "keywords": [
+    "ai", "cursor", "claude", "codex", "backup", "exporter", "llm", "training-data"
+  ],
+  "author": "",
+  "license": "MIT",
+  "files": [
+    "src/",
+    "core/",
+    "viewer/",
+    "README.md",
+    "LICENSE",
+    ".aexignore"
+  ],
+  "dependencies": {
+    "ajv":            "^8.17.1",
+    "better-sqlite3": "^12.8.0",
+    "fs-extra":       "^11.3.4",
+    "glob":           "^13.0.6",
+    "p-limit":        "^6.2.0"
+  },
+  "devDependencies": {
+    "c8": "^10.1.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
