@@ -152,7 +152,7 @@ MIT License
 
 ### Overview
 
-One-click tool to scan, backup, and export AI coding assistant conversations. Supports 26+主流 agents, converts data to Markdown/JSON/training formats for AI training and cross-tool migration.
+One-click tool to scan, backup, and export AI coding assistant conversations. Supports 26+ popular agents, converts data to Markdown/JSON/training formats for AI training and cross-tool migration.
 
 ### Features
 
