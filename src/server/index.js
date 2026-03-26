@@ -595,14 +595,11 @@ async function handleThreads(req, res, url) {
   const dataDir = serverSettings.dataDir || OUTPUT_DIR;
 
   try {
-    let records = await loadRecordsFromDir(dataDir);
-    if (source) records = records.filter((r) => r.meta?.source === source);
-    if (search) records = records.filter((r) =>
-      JSON.stringify(r).toLowerCase().includes(search)
-    );
+    const records = await loadRecordsFromDir(dataDir, { onlyMetadata: true, search, source });
     const total = records.length;
     const items = records.slice((page - 1) * size, (page - 1) * size + size);
     respond(res, 200, { total, page, size, items });
+
   } catch (err) {
     respond(res, 500, { error: err.message });
   }
@@ -660,7 +657,7 @@ async function readBody(req) {
   });
 }
 
-async function loadRecordsFromDir(dir) {
+async function loadRecordsFromDir(dir, { onlyMetadata = false, search = null, source = null } = {}) {
   const records = [];
   try {
     const subDirs = await fs.readdir(dir);
@@ -672,7 +669,21 @@ async function loadRecordsFromDir(dir) {
       for (const f of files) {
         if (!f.endsWith(".json")) continue;
         try {
-          const record = await fs.readJson(path.join(subPath, f));
+          const filePath = path.join(subPath, f);
+          const record = await fs.readJson(filePath);
+          
+          // Apply filters early to save memory
+          if (source && record.meta?.source !== source) continue;
+          if (search) {
+            const str = JSON.stringify(record).toLowerCase();
+            if (!str.includes(search)) continue;
+          }
+
+          if (onlyMetadata) {
+            // Strip heavy fields for the list view
+            delete record.messages;
+            delete record.context;
+          }
           records.push(record);
         } catch { /* skip */ }
       }
