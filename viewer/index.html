@@ -1377,6 +1377,60 @@ async function doImport() {
     status.style.color = '#dc2626';
   }
 }
+async function syncFromAgent() {
+  const agent = document.getElementById('adapter-agent-select').value;
+  const status = document.getElementById('sync-status');
+  status.textContent = `正在从 ${agent} 提取配置...`;
+  status.style.color = '#4f46e5';
+  
+  try {
+    const res = await fetch(`${API_BASE}/api/adapter/${agent}`);
+    const uas = await res.json();
+    
+    if (confirm(`发现 ${agent} 配置：\n- MCP 服务: ${uas.mcpServers.length} 个\n- Skills: ${uas.skills.length} 个\n- 记忆规则: ${uas.context.projectRules ? '已设置' : '未设置'}\n\n是否确认导入到 Antigravity？`)) {
+      status.textContent = `正在将 ${agent} 导入到 Antigravity...`;
+      const importRes = await fetch(`${API_BASE}/api/adapter/${agent}/import`, { method: 'POST' });
+      const result = await importRes.json();
+      if (result.success) {
+        status.textContent = '✅ 同步成功！配置已保存到 agent-config 目录。';
+        status.style.color = '#059669';
+      } else {
+        throw new Error(result.error || '同步失败');
+      }
+    } else {
+      status.textContent = '已取消同步';
+      status.style.color = '#6b7280';
+    }
+  } catch (e) {
+    status.textContent = '❌ 同步失败: ' + e.message;
+    status.style.color = '#dc2626';
+  }
+}
+
+async function syncToAgent() {
+  const agent = document.getElementById('adapter-agent-select').value;
+  const status = document.getElementById('sync-status');
+  status.textContent = '正在准备导出...';
+  
+  try {
+    const res = await fetch(`${API_BASE}/api/adapter/${agent}/export`);
+    const bundle = await res.json();
+    
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `antigravity-to-${agent}-bundle-${new Date().getTime()}.json`;
+    a.click();
+    
+    status.textContent = `✅ 导出成功！请在 ${agent} 的设置中参考此文件进行手动合并。`;
+    status.style.color = '#059669';
+  } catch (e) {
+    status.textContent = '❌ 导出失败: ' + e.message;
+    status.style.color = '#dc2626';
+  }
+}
+
 </script>
 
 <!-- Settings Modal -->
@@ -1413,6 +1467,24 @@ async function doImport() {
     </div>
     <div id="import-preview" style="margin:12px 0;"></div>
     <div id="import-status" style="font-size:13px;margin-bottom:12px;"></div>
+    
+    <div style="border-top: 1px solid #eee; margin-top: 20px; padding-top: 20px;">
+      <h4 style="margin-top:0; color:#4b5563; font-size:14px;">🔄 智能体配置同步 (Agent Sync)</h4>
+      <div style="display:flex; gap: 8px; align-items: center; margin-bottom: 10px;">
+        <label style="font-size:12px; color:#6b7280;">源/目标 Agent:</label>
+        <select id="adapter-agent-select" style="padding:4px 8px; border-radius:4px; font-size:12px; border:1px solid #dde0ea;">
+          <option value="cursor">Cursor</option>
+          <option value="claude">Claude Code</option>
+          <option value="codex">Codex</option>
+        </select>
+      </div>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <button class="btn-export" onclick="syncFromAgent()" style="background:#0ea5e9; font-size:12px; padding:10px;">🔌 从 Agent 导入</button>
+        <button class="btn-export" onclick="syncToAgent()" style="background:#7c3aed; font-size:12px; padding:10px;">📤 导出到 Agent</button>
+      </div>
+      <div id="sync-status" style="font-size:12px; color:#6b7280; margin-top:8px;"></div>
+    </div>
+
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeImport()">取消</button>
       <button class="btn-save" onclick="doImport()" style="background:#7c3aed;">导入到 Agent</button>

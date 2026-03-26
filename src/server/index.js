@@ -22,8 +22,10 @@ import os from "node:os";
 import crypto from "node:crypto";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
+import { AgentTransformer } from "../../adapter/index.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const VIEWER_DIR = path.resolve(__dirname, "../../viewer");
 const OUTPUT_DIR = path.resolve("./agent-backup");
 
@@ -96,6 +98,16 @@ async function route(req, res) {
     if (sub === "/events" && method === "GET") return handleJobSSE(req, res, jobId);
     if (sub === "/cancel" && method === "POST") return handleJobCancel(req, res, jobId);
     if (!sub && method === "GET") return handleJobStatus(req, res, jobId);
+  }
+  
+  // ── Adapter (Agent Sync)
+  const adapterMatch = pathname.match(/^\/api\/adapter\/([^/]+)(\/import|\/export)?$/);
+  if (adapterMatch) {
+    const agent = adapterMatch[1];
+    const action = adapterMatch[2];
+    if (method === "GET" && !action) return handleAdapterPreview(req, res, agent);
+    if (method === "POST" && action === "/import") return handleAdapterImport(req, res, agent);
+    if (method === "GET" && action === "/export") return handleAdapterExport(req, res, agent);
   }
 
   // ── Threads (paginated)
@@ -717,4 +729,30 @@ export function startServer({ host = "127.0.0.1", port = 8080 } = {}) {
 
     server.on("error", reject);
   });
+}
+async function handleAdapterPreview(req, res, agent) {
+  try {
+    const uas = await AgentTransformer.extractFrom(agent);
+    respond(res, 200, uas);
+  } catch (err) {
+    respond(res, 500, { error: err.message });
+  }
+}
+
+async function handleAdapterImport(req, res, agent) {
+  try {
+    const result = await AgentTransformer.importToAntigravity(agent);
+    respond(res, 200, result);
+  } catch (err) {
+    respond(res, 500, { error: err.message });
+  }
+}
+
+async function handleAdapterExport(req, res, agent) {
+  try {
+    const bundle = await AgentTransformer.exportTo(agent);
+    respond(res, 200, bundle);
+  } catch (err) {
+    respond(res, 500, { error: err.message });
+  }
 }
