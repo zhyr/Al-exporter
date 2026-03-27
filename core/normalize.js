@@ -101,7 +101,11 @@ function normalizeItem(item) {
   const healthWarnings = [...warnings];
   const missingRole = messages.filter((m) => !m.role || m.role === "unknown").length;
   if (missingRole > 0) healthWarnings.push(`${missingRole} message(s) have missing/unknown role`);
-  const emptyContent = messages.filter((m) => !m.content || m.content.trim() === "").length;
+  const emptyContent = messages.filter((m) => {
+    if (!m.content) return true;
+    if (typeof m.content !== "string") return false;
+    return m.content.trim() === "";
+  }).length;
   if (emptyContent > 0) healthWarnings.push(`${emptyContent} message(s) have empty content`);
   if (item.size > 1024 * 1024) healthWarnings.push(`Large file: ${(item.size / 1024 / 1024).toFixed(1)}MB`);
 
@@ -522,7 +526,9 @@ function extractFromJsonl(content) {
   }
 
   const firstUser = messages.find((m) => m.role === "user");
-  const prompt = firstUser?.content?.slice(0, 120) ?? null;
+  const prompt = typeof firstUser?.content === "string" 
+    ? firstUser.content.slice(0, 120) 
+    : (firstUser?.content ? String(firstUser.content).slice(0, 120) : null);
   return { messages, context, prompt, confidence: messages.length > 0 ? "high" : "unknown", warnings };
 }
 
@@ -564,7 +570,7 @@ function detectJsonSchema(parsed) {
     if (Array.isArray(conv)) {
       const messages = conv.map((m) => ({
         role: m.role || (m.type === "ai" ? "assistant" : "user"),
-        content: m.content || m.text || "",
+        content: typeof m.content === "string" ? m.content : (m.text || (m.content ? JSON.stringify(m.content) : "")),
         ...(m.timestamp ? { timestamp: m.timestamp } : {}),
       }));
       return { schemaName: "cursor-composer", messages, context: { files: [], diffs: [] } };
@@ -610,7 +616,7 @@ function detectJsonSchema(parsed) {
   if (Array.isArray(parsed) && parsed[0]?.role) {
     const messages = parsed.map((m) => ({
       role: m.role || "unknown",
-      content: m.content || m.text || "",
+      content: typeof m.content === "string" ? m.content : (m.text || (m.content ? JSON.stringify(m.content) : "")),
     }));
     return { schemaName: "flat-array", messages, context: { files: [], diffs: [] } };
   }
@@ -621,7 +627,7 @@ function detectJsonSchema(parsed) {
     const messages = fallbackArray.flatMap((t) =>
       (t.messages || [t]).map((m) => ({
         role: m.role || "unknown",
-        content: m.content || m.text || "",
+        content: typeof m.content === "string" ? m.content : (m.text || (m.content ? JSON.stringify(m.content) : "")),
       }))
     );
     return { schemaName: "generic-convo", messages, context: { files: [], diffs: [] } };

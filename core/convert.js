@@ -63,8 +63,8 @@ function extractPairs(messages, minLength) {
     const user = messages[i];
     const asst = messages[i + 1];
     if (user?.role !== "user" || asst?.role !== "assistant") continue;
-    const instruction = (user.content || "").trim();
-    const output = (asst.content || "").trim();
+    const instruction = typeof user.content === "string" ? user.content.trim() : (user.content ? JSON.stringify(user.content) : "");
+    const output = typeof asst.content === "string" ? asst.content.trim() : (asst.content ? JSON.stringify(asst.content) : "");
     if (instruction.length < minLength || output.length < minLength) continue;
     pairs.push({ instruction, input: "", output });
   }
@@ -74,10 +74,13 @@ function extractPairs(messages, minLength) {
 /** ShareGPT: { id, conversations: [{from, value}] } */
 function toShareGpt(record, { minLength, dedupe, seenHashes }) {
   const convs = (record.messages || [])
-    .filter((m) => m.content && m.content.trim().length >= minLength)
+    .filter((m) => {
+      const content = typeof m.content === "string" ? m.content : (m.content ? JSON.stringify(m.content) : "");
+      return content.trim().length >= minLength;
+    })
     .map((m) => ({
       from: m.role === "assistant" ? "gpt" : m.role === "system" ? "system" : "human",
-      value: m.content.trim(),
+      value: typeof m.content === "string" ? m.content.trim() : JSON.stringify(m.content),
     }));
   if (convs.length < 2) return null;
   const key = convs.map((c) => c.value).join("::");
@@ -89,8 +92,14 @@ function toShareGpt(record, { minLength, dedupe, seenHashes }) {
 /** Multiturn: { messages: [{role, content}] } */
 function toMultiturn(record, { minLength }) {
   const msgs = (record.messages || [])
-    .filter((m) => m.content && m.content.trim().length >= minLength)
-    .map((m) => ({ role: m.role, content: m.content.trim() }));
+    .filter((m) => {
+      const content = typeof m.content === "string" ? m.content : (m.content ? JSON.stringify(m.content) : "");
+      return content.trim().length >= minLength;
+    })
+    .map((m) => ({ 
+      role: m.role, 
+      content: typeof m.content === "string" ? m.content.trim() : JSON.stringify(m.content) 
+    }));
   if (msgs.length === 0) return null;
   return {
     thread_id: record.thread_id,
@@ -178,10 +187,16 @@ export function computeStats(records, groupBy = ["project", "source"]) {
         confidence: { high: 0, low: 0, unknown: 0 },
       };
     }
-    
-    const userToks = (r.messages || []).filter(m=>m.role === 'user').reduce((a,m)=>a+((m.content||'').length/4|0),0);
-    const aiToks = (r.messages || []).filter(m=>m.role === 'assistant').reduce((a,m)=>a+((m.content||'').length/4|0),0);
-    
+
+    const userToks = (r.messages || []).filter(m => m.role === 'user').reduce((a, m) => {
+      const content = typeof m.content === 'string' ? m.content : (m.content ? JSON.stringify(m.content) : '');
+      return a + (content.length / 4 | 0);
+    }, 0);
+    const aiToks = (r.messages || []).filter(m => m.role === 'assistant').reduce((a, m) => {
+      const content = typeof m.content === 'string' ? m.content : (m.content ? JSON.stringify(m.content) : '');
+      return a + (content.length / 4 | 0);
+    }, 0);
+
     total_user_tokens += userToks;
     total_ai_tokens += aiToks;
     max_ai_overall = Math.max(max_ai_overall, aiToks);
@@ -194,7 +209,7 @@ export function computeStats(records, groupBy = ["project", "source"]) {
     groups[groupKey].ai_tokens += aiToks;
     groups[groupKey].max_ai = Math.max(groups[groupKey].max_ai, aiToks);
     groups[groupKey].max_user = Math.max(groups[groupKey].max_user, userToks);
-    
+
     const conf = r.meta?.recognition_confidence || "unknown";
     groups[groupKey].confidence[conf] = (groups[groupKey].confidence[conf] || 0) + 1;
   }
@@ -222,9 +237,9 @@ import fs from 'fs-extra';
  */
 export async function saveRecordsToDir(records, outputDir) {
   const limit = pLimit(10); // Limit to 10 concurrent writes to avoid EMFILE
-  
+
   await fs.ensureDir(outputDir);
-  
+
   // 按 source 分组保存
   const bySource = {};
   for (const r of records) {
@@ -232,15 +247,16 @@ export async function saveRecordsToDir(records, outputDir) {
     if (!bySource[src]) bySource[src] = [];
     bySource[src].push(r);
   }
-  
+
   const tasks = [];
   for (const [source, recs] of Object.entries(bySource)) {
     const dir = path.join(outputDir, source);
     tasks.push(limit(async () => {
       await fs.ensureDir(dir);
-      
+
       await Promise.all(recs.map(r => limit(async () => {
-        const id = r.thread_id || r.messages?.[0]?.content?.slice(0, 20) || Date.now();
+        const firstContent = r.messages?.[0]?.content;
+        const id = r.thread_id || (typeof firstContent === 'string' ? firstContent.slice(0, 20) : (firstContent ? JSON.stringify(firstContent).slice(0, 20) : Date.now()));
         const safeId = String(id).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 50);
         const filePath = path.join(dir, `${safeId}.json`);
         await fs.writeFile(filePath, JSON.stringify(r, null, 2));

@@ -21,7 +21,7 @@ describe("normalizeMetaSource", () => {
   it("maps 'claude' → claude_code", () => assert.equal(normalizeMetaSource("claude"), "claude_code"));
   it("maps 'openai' → codex",       () => assert.equal(normalizeMetaSource("openai"), "codex"));
   it("maps 'qcoder' → qoder",       () => assert.equal(normalizeMetaSource("qcoder"), "qoder"));
-  it("maps 'zed' → unknown",        () => assert.equal(normalizeMetaSource("zed"), "unknown"));
+  it("maps 'zed' → zed",          () => assert.equal(normalizeMetaSource("zed"), "zed"));
   it("unknown gibberish → other",   () => assert.equal(normalizeMetaSource("my-custom-tool-123"), "other"));
 });
 
@@ -80,5 +80,29 @@ describe("normalizeAll — health warnings", () => {
   it("adds warning for empty content", () => {
     assert.ok(records.length >= 1);
     assert.ok(records[0].meta.warnings?.some(w => w.includes("empty content")));
+  });
+});
+
+describe("normalizeAll — regression for non-string content", () => {
+  const raw = [{
+    path: "/fake/cursor/composer.json",
+    content: JSON.stringify({
+      composerData: {
+        conversation: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "Complex content" }] // Array content!
+          }
+        ]
+      }
+    }),
+    mtime: Date.now(), size: 100,
+  }];
+  
+  it("does not crash and stringifies content", () => {
+    const records = normalizeAll(raw);
+    assert.ok(records.length >= 1);
+    assert.equal(typeof records[0].messages[0].content, "string");
+    assert.ok(records[0].messages[0].content.includes("Complex content"));
   });
 });

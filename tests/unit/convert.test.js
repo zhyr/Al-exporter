@@ -14,7 +14,7 @@ const FIXTURE = {
   messages: [
     { role: "user",      content: "How do I write a binary search?" },
     { role: "assistant", content: "Here is a binary search implementation..." },
-    { role: "user",      content: "Can you add tests?" },
+    { role: "user",      content: "Can you add tests for this implementation?" },
     { role: "assistant", content: "Sure, here are the tests..." },
   ],
   context: { files: [], diffs: [] },
