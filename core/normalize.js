@@ -28,6 +28,7 @@ export function identifyType(filePath) {
   if (filename.includes("artifact") || p.includes("/artifact")) return "artifact";
   if (filename.includes("mcp") || p.includes("/mcp") || filename === "mcp.json") return "mcp";
   if (filename.includes("rule") || p.includes("/rules") || p.endsWith(".mdc") || p.endsWith(".cursorrules")) return "rule";
+  if (filename.includes("agent") || p.includes("/agent") || filename.endsWith("agent.md")) return "agent";
   if (filename.includes("settings") || filename.includes("config") || filename.includes("storage")) return "config";
   return "thread";
 }

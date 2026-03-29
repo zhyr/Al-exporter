@@ -209,6 +209,8 @@
     .artifact-title { background: #f9fafb; padding: 8px 12px; font-size: 12px; font-weight: 600; color: #374151; border-bottom: 1px solid #e5e7ef; }
     .artifact-code { background: #1e1e2e; color: #cdd6f4; padding: 12px; margin: 0; font-size: 11px; overflow-x: auto; }
     .code-block { background: #1e1e2e; color: #cdd6f4; padding: 12px; border-radius: 6px; font-size: 11px; overflow-x: auto; }
+    .agent-content { background: #f9fafb; border-radius: 8px; padding: 12px; font-size: 13px; line-height: 1.6; }
+    .agent-content pre { background: #1e1e2e; color: #cdd6f4; padding: 12px; border-radius: 6px; overflow-x: auto; margin-top: 8px; }
 
     /* ── Empty ── */
     .empty { text-align: center; padding: 60px 20px; color: #9ca3b0; }
@@ -1231,9 +1233,18 @@ function openDetail(idx) {
     return `<div class="msg ${cls}"><div class="msg-role">${m.role}</div><div>${content}</div></div>`;
   }).join('');
 
+  // If no messages, try to show content from other fields
+  let messageSection = msgs;
+  if (!messageSection) {
+    const altContent = extractAgentContent(r);
+    if (altContent) {
+      messageSection = `<div class="msg msg-system"><div class="msg-role">content</div><div>${renderMarkdown(altContent)}</div></div>`;
+    }
+  }
+
   detailContent += `<div class="detail-section">
     <h4>💬 Messages (${r.messages?.length || 0})</h4>
-    ${msgs || '<p style="color:#9ca3b0;font-size:13px">No messages.</p>'}
+    ${messageSection || '<p style="color:#9ca3b0;font-size:13px">No content available.</p>'}
   </div>`;
 
   document.getElementById('d-body').innerHTML = detailContent;
@@ -1320,6 +1331,17 @@ function getTypeInfo(type, r) {
         sections.push(`<div class="detail-section">
           <h4>🎨 Artifacts (${artifacts.length})</h4>
           <div class="artifacts-list">${artifacts.map(a => `<div class="artifact-item"><div class="artifact-title">${escHtml(a.title || 'Untitled')}</div><pre class="artifact-code">${escHtml(a.code || '')}</pre></div>`).join('')}</div>
+        </div>`);
+      }
+      break;
+      
+    case 'agent':
+      // Agent: show agent definition/prompt
+      const agentContent = extractAgentContent(r);
+      if (agentContent) {
+        sections.push(`<div class="detail-section">
+          <h4>🤖 Agent Configuration</h4>
+          <div class="agent-content">${renderMarkdown(agentContent)}</div>
         </div>`);
       }
       break;
@@ -1447,6 +1469,18 @@ function extractArtifacts(messages) {
     }
   }
   return artifacts.slice(0, 10);
+}
+
+function extractAgentContent(r) {
+  // Try various content sources
+  if (r.messages && r.messages.length > 0) {
+    return r.messages.map(m => m.content || '').join('\n\n');
+  }
+  // Fallback: check for raw content in other fields
+  if (r.content) return r.content;
+  if (r.text) return r.text;
+  if (r.data) return typeof r.data === 'string' ? r.data : JSON.stringify(r.data, null, 2);
+  return null;
 }
 
 function closeDetail() {
