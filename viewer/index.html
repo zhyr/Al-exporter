@@ -64,12 +64,14 @@
     .result-count { font-size: 13px; color: #6b7280; }
     .btn-export {
       display: flex; align-items: center; gap: 6px;
-      background: #4f46e5; color: #fff; border: none;
-      padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+      background: #f2f2f2; color: #111827; border: 1px solid #e5e7eb;
+      padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 500;
       cursor: pointer; transition: background .15s;
     }
-    .btn-export:hover { background: #4338ca; }
-    .content { flex: 1; overflow-y: auto; padding: 24px 28px; }
+    .btn-export:hover { background: #e5e5e5; }
+    .btn-export.purple-border { border: 2px solid #9333ea; }
+    .btn-export.scanning { opacity: 0.7; cursor: wait; }
+    .content { flex: 1; overflow-x: hidden; overflow-y: auto; padding: 24px 28px; }
 
     /* ── Overview stats ── */
     .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
@@ -109,23 +111,14 @@
 
     .cards-grid {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 12px;
-    }
-    @media (max-width: 1400px) {
-      .cards-grid { grid-template-columns: repeat(4, 1fr); }
-    }
-    @media (max-width: 1100px) {
-      .cards-grid { grid-template-columns: repeat(3, 1fr); }
-    }
-    @media (max-width: 800px) {
-      .cards-grid { grid-template-columns: repeat(2, 1fr); }
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
     }
     .thread-card {
       background: #fff; border: 1px solid #e5e7ef; border-radius: 10px;
-      padding: 10px 12px; cursor: pointer; transition: border-color .15s, box-shadow .15s;
-      display: flex; flex-direction: column; gap: 4px;
-      min-height: 110px; justify-content: flex-start;
+      padding: 14px 16px; cursor: pointer; transition: border-color .15s, box-shadow .15s;
+      display: flex; flex-direction: column; gap: 6px;
+      min-height: 160px; justify-content: flex-start;
       position: relative;
     }
     .thread-card:hover { border-color: #4f46e5; border-width: 2px; box-shadow: 0 4px 12px rgba(79,70,229,.1); }
@@ -212,6 +205,48 @@
     .agent-content { background: #f9fafb; border-radius: 8px; padding: 12px; font-size: 13px; line-height: 1.6; }
     .agent-content pre { background: #1e1e2e; color: #cdd6f4; padding: 12px; border-radius: 6px; overflow-x: auto; margin-top: 8px; }
 
+    /* ── New Detail Layout ── */
+    .detail-header-new { padding: 20px 24px; border-bottom: 1px solid #e5e7eb; background: #fff; }
+    .detail-header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+    .detail-header-new h2 { font-size: 16px; font-weight: 700; color: #111827; margin: 0; line-height: 1.4; flex: 1; }
+    .detail-header-actions { display: flex; gap: 8px; flex-shrink: 0; }
+    .detail-header-new .btn-action { padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid #e5e7eb; background: #fff; color: #374151; transition: all .15s; }
+    .detail-header-new .btn-action:hover { background: #f3f4f6; border-color: #d1d5db; }
+    .detail-header-new .btn-action.primary { background: #0ea5e9; color: #fff; border-color: #0ea5e9; }
+    .detail-header-new .btn-action.primary:hover { background: #0284c7; }
+    .detail-meta-new { font-size: 12px; color: #6b7280; }
+    .detail-meta-new .meta-row { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 4px; }
+    .detail-meta-new .meta-item { display: flex; align-items: center; gap: 4px; }
+    .detail-meta-new .meta-label { color: #9ca3af; }
+    .detail-meta-new .meta-value { color: #374151; font-weight: 500; }
+
+    /* Tasks Section */
+    .tasks-section { padding: 16px 24px; border-bottom: 1px solid #e5e7eb; background: #fafafa; }
+    .tasks-section h3 { font-size: 13px; font-weight: 700; color: #374151; margin: 0 0 12px 0; }
+    .tasks-list-new { display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; }
+    .task-item-new { display: flex; align-items: flex-start; gap: 10px; padding: 8px 12px; background: #fff; border-radius: 6px; border: 1px solid #e5e7eb; }
+    .task-item-new .task-icon { width: 8px; height: 8px; background: #22c55e; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+    .task-item-new .task-text { font-size: 13px; color: #374151; line-height: 1.5; }
+    .task-item-new .task-status { font-size: 11px; color: #9ca3af; margin-top: 4px; }
+
+    /* Messages Section */
+    .messages-section { flex: 1; overflow-y: auto; padding: 16px 24px; }
+    .messages-section h3 { font-size: 13px; font-weight: 700; color: #374151; margin: 0 0 12px 0; }
+    .message-group { margin-bottom: 16px; }
+    .message-group-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #f3f4f6; }
+    .message-group-header .role-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; padding: 3px 8px; border-radius: 4px; }
+    .message-group-header .role-user { background: #eef0fd; color: #4f46e5; }
+    .message-group-header .role-assistant { background: #f3f4f6; color: #6b7280; }
+    .message-group-header .msg-count { font-size: 11px; color: #9ca3af; }
+    .message-item { padding: 12px 16px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 8px; }
+    .message-item:last-child { margin-bottom: 0; }
+    .message-item .msg-content { font-size: 13px; line-height: 1.6; color: #374151; }
+    .message-item .msg-timestamp { font-size: 11px; color: #9ca3af; margin-top: 8px; }
+
+    /* Empty state */
+    .detail-empty { text-align: center; padding: 40px 20px; color: #9ca3af; }
+    .detail-empty .empty-icon { font-size: 32px; margin-bottom: 8px; }
+
     /* ── Empty ── */
     .empty { text-align: center; padding: 60px 20px; color: #9ca3b0; }
     .empty .em { font-size: 40px; margin-bottom: 12px; }
@@ -296,9 +331,10 @@
     <div class="topbar-right">
       <span class="result-count" id="result-count"></span>
       <span id="last-scan-time" style="font-size:12px;color:#9ca3b0;margin-right:8px;"></span>
-      <button class="btn-export" style="background:#7c3aed; margin-right:8px;" id="btn-import" onclick="openImport()">↓ Import</button>
-      <button class="btn-export" style="background:#059669; margin-right:8px;" id="btn-scan" onclick="triggerScan(true)">增量扫描</button>
-      <button class="btn-export" style="background:#ea580c; margin-right:8px;" id="btn-plugins" onclick="openPlugins()">🧩 插件</button>
+      <button class="btn-export" style="margin-right:8px;" id="btn-import" onclick="openImport()">↓ Import</button>
+      <button class="btn-export purple-border" style="margin-right:8px;" id="btn-scan" onclick="triggerScan(true)">增量扫描</button>
+      <button class="btn-export" style="margin-right:8px;" id="btn-filter" onclick="toggleFilter()">🔍 筛选</button>
+      <button class="btn-export" style="margin-right:8px;" id="btn-plugins" onclick="openPlugins()">🧩 插件</button>
       <button class="btn-export" id="btn-settings" onclick="openSettings()">⚙ 设置</button>
       <button class="btn-export" id="btn-export-all" onclick="exportAll()">⬆ Export All</button>
     </div>
@@ -324,18 +360,25 @@
 <!-- Detail slide-over -->
 <div class="overlay" id="overlay" onclick="closeDetail()"></div>
 <div class="detail" id="detail">
-  <div class="detail-header">
-    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
-      <h2 id="d-title" style="margin:0; font-size:18px; color:#111827;"></h2>
-      <button class="btn-close" onclick="closeDetail()">✕</button>
+  <!-- New Layout: Header -->
+  <div class="detail-header-new">
+    <div class="detail-header-row">
+      <h2 id="d-title"></h2>
+      <div class="detail-header-actions">
+        <button onclick="copyCurrentThread()" class="btn-action">Copy</button>
+        <button onclick="exportCurrentThread()" class="btn-action primary">Export JSON</button>
+        <button class="btn-close" onclick="closeDetail()">✕</button>
+      </div>
     </div>
-    <div class="detail-meta" id="d-meta" style="margin-bottom:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
-    <div id="d-actions" style="display:flex; gap:8px; flex-wrap:nowrap; flex-shrink:0;">
-      <button onclick="copyCurrentThread()" class="btn-export" style="background:#f3f4f6; color:#111827; border:1px solid #e5e7eb; white-space:nowrap;">Copy</button>
-      <button onclick="exportCurrentThread()" class="btn-export" style="background:#0ea5e9; white-space:nowrap;">Export JSON</button>
-    </div>
+    <div class="detail-meta-new" id="d-meta"></div>
   </div>
-  <div class="detail-body" id="d-body"></div>
+  <!-- Tasks Section -->
+  <div class="tasks-section" id="d-tasks" style="display:none;">
+    <h3>Tasks</h3>
+    <div class="tasks-list-new" id="d-tasks-list"></div>
+  </div>
+  <!-- Messages Section -->
+  <div class="messages-section" id="d-body"></div>
 </div>
 
 
@@ -680,7 +723,7 @@ async function triggerScan(isManualRefresh = false) {
   isScanning = true;
   
   const btn = document.getElementById('btn-scan');
-  if (btn) btn.innerHTML = '扫描中...';
+  if (btn) { btn.innerHTML = '扫描中...'; btn.classList.add('scanning'); }
   
   if (!isManualRefresh) {
     document.getElementById('tool-list').innerHTML = '<div style="padding: 16px; color: #9ca3b0; font-size: 13px;">Scanning...</div>';
@@ -749,10 +792,10 @@ async function triggerScan(isManualRefresh = false) {
           const jobRes = await fetch(`${API_BASE}/api/jobs/${job_id}`);
           const jobData = await jobRes.json();
           let newRecords = jobData.result?.records || [];
-          
+
           isScanning = false;
-          if (btn) btn.innerHTML = '增量扫描';
-          
+          if (btn) { btn.innerHTML = '增量扫描'; btn.classList.remove('scanning'); }
+
           // 更新最后扫描时间
           const now = new Date();
           const timeStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
@@ -786,7 +829,7 @@ async function triggerScan(isManualRefresh = false) {
           sse.close();
           if (!isManualRefresh && el) el.textContent = 'Scan failed: ' + (data.error || 'Unknown error');
           isScanning = false;
-          if (btn) btn.innerHTML = '增量扫描';
+          if (btn) { btn.innerHTML = '增量扫描'; btn.classList.remove('scanning'); }
           resolve([]);
         }
       };
@@ -794,7 +837,7 @@ async function triggerScan(isManualRefresh = false) {
         console.log('SSE error:', e);
         sse.close();
         isScanning = false;
-        if (btn) btn.innerHTML = '增量扫描';
+        if (btn) { btn.innerHTML = '增量扫描'; btn.classList.remove('scanning'); }
         resolve([]);
       };
     });
@@ -802,7 +845,7 @@ async function triggerScan(isManualRefresh = false) {
     const el = document.getElementById('scan-status-text');
     if (!isManualRefresh && el) el.textContent = 'Failed to connect: ' + err.message;
     isScanning = false;
-    if (btn) btn.innerHTML = '增量扫描';
+    if (btn) { btn.innerHTML = '增量扫描'; btn.classList.remove('scanning'); }
     return [];
   }
 }
@@ -832,6 +875,23 @@ async function init() {
   populateProjectList();
   renderSidebar();
   renderContent();
+}
+
+function toggleFilter() {
+  const bar = document.getElementById('filter-bar');
+  const btn = document.getElementById('btn-filter');
+  if (bar.style.display === 'none') {
+    bar.style.display = 'flex';
+    btn.classList.add('purple-border');
+  } else {
+    bar.style.display = 'none';
+    btn.classList.remove('purple-border');
+    // Clear filters when hiding
+    document.getElementById('filter-start-date').value = '';
+    document.getElementById('filter-end-date').value = '';
+    document.getElementById('filter-project').value = '';
+    applyFilter();
+  }
 }
 
 function populateProjectList() {
@@ -1238,67 +1298,139 @@ function renderDetailContent(r) {
   const filePath = r.meta?.file_path || r.path || 'N/A';
   const threadId = r.thread_id || extractFilename(r.path || '');
 
+  // Update header
   document.getElementById('d-title').textContent = title;
   document.getElementById('d-meta').innerHTML = `
-    <span class="tag tag-type" style="margin-bottom:8px;">${type.toUpperCase()}</span><br/>
-    Source: <b>${source}</b> &nbsp;|&nbsp;
-    Tokens: ~<b>${fmtNum(tokens)}</b> &nbsp;|&nbsp;
-    Project: <b>${project}</b>
-    <div style="margin-top:4px;">ID: ${threadId}</div>
-    <div style="margin-top:4px;word-break:break-all;">File: ${filePath}</div>
-    ${typeInfo.extraMeta || ''}
+    <div class="meta-row">
+      <div class="meta-item"><span class="meta-label">Type:</span> <span class="meta-value">${type.toUpperCase()}</span></div>
+      <div class="meta-item"><span class="meta-label">Source:</span> <span class="meta-value">${source}</span></div>
+      <div class="meta-item"><span class="meta-label">Tokens:</span> <span class="meta-value">~${fmtNum(tokens)}</span></div>
+      <div class="meta-item"><span class="meta-label">Project:</span> <span class="meta-value">${project}</span></div>
+    </div>
+    <div class="meta-row">
+      <div class="meta-item"><span class="meta-label">ID:</span> <span class="meta-value">${threadId}</span></div>
+    </div>
   `;
 
-  // Build detail content based on type
-  let detailContent = '';
+  // Extract and render Tasks
+  const tasks = extractTasks(r.messages) || [];
+  const tasksSection = document.getElementById('d-tasks');
+  const tasksList = document.getElementById('d-tasks-list');
 
-  // Context files
-  const contextFiles = r.context?.files || [];
-  if (contextFiles.length > 0) {
-    detailContent += `<div class="detail-section">
-      <h4>📁 Context Files (${contextFiles.length})</h4>
-      <div class="context-files">${contextFiles.map(f => `<div class="context-file"><span class="cf-path">${escHtml(f.path || '')}</span><pre class="cf-snippet">${escHtml(f.snippet || '').slice(0, 500)}</pre></div>`).join('')}</div>
-    </div>`;
+  if (tasks.length > 0) {
+    tasksSection.style.display = 'block';
+    tasksList.innerHTML = tasks.map(t => `
+      <div class="task-item-new">
+        <div class="task-icon"></div>
+        <div class="task-text">${renderMarkdown(t)}</div>
+      </div>
+    `).join('');
+  } else {
+    tasksSection.style.display = 'none';
   }
 
-  // Context diffs
-  const contextDiffs = r.context?.diffs || [];
-  if (contextDiffs.length > 0) {
-    detailContent += `<div class="detail-section">
-      <h4>📝 Context Diffs (${contextDiffs.length})</h4>
-      <div class="context-diffs">${contextDiffs.map(d => `<div class="context-diff"><span class="cf-path">${escHtml(d.path || '')}</span><pre class="cf-snippet">${escHtml(d.patch || '').slice(0, 800)}</pre></div>`).join('')}</div>
-    </div>`;
-  }
-
-  // Type-specific content
-  if (typeInfo.sections) {
-    detailContent += typeInfo.sections;
-  }
-
-  // Messages
+  // Render Messages by role groups
   const messageList = r.messages || [];
-  const msgs = messageList.map(m => {
-    const cls = m.role === 'user' ? 'msg-user' : m.role === 'assistant' ? 'msg-assistant' : 'msg-system';
-    const content = renderMarkdown(m.content);
-    return `<div class="msg ${cls}"><div class="msg-role">${m.role}</div><div>${content}</div></div>`;
-  }).join('');
 
   // If no messages, try to show content from other fields
-  let messageSection = msgs;
-  if (messageList.length === 0) {
+  let hasContent = messageList.length > 0;
+  if (!hasContent) {
     const altContent = extractAgentContent(r);
     if (altContent) {
-      messageSection = `<div class="msg msg-system"><div class="msg-role">content</div><div>${renderMarkdown(altContent)}</div></div>`;
+      hasContent = true;
     }
   }
 
-  const msgCount = messageList.length;
-  detailContent += `<div class="detail-section">
-    <h4>💬 Messages (${msgCount})</h4>
-    ${messageSection || '<p style="color:#9ca3b0;font-size:13px">No content available.</p>'}
-  </div>`;
+  let messagesHtml = '';
 
-  document.getElementById('d-body').innerHTML = detailContent;
+  if (hasContent) {
+    // Group messages by role
+    const userMessages = messageList.filter(m => m.role === 'user');
+    const assistantMessages = messageList.filter(m => m.role === 'assistant');
+    const otherMessages = messageList.filter(m => m.role !== 'user' && m.role !== 'assistant');
+
+    // Render User messages
+    if (userMessages.length > 0) {
+      messagesHtml += `
+        <div class="message-group">
+          <div class="message-group-header">
+            <span class="role-label role-user">User</span>
+            <span class="msg-count">(${userMessages.length})</span>
+          </div>
+          ${userMessages.map(m => `
+            <div class="message-item">
+              <div class="msg-content">${renderMarkdown(m.content)}</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    // Render Assistant messages
+    if (assistantMessages.length > 0) {
+      messagesHtml += `
+        <div class="message-group">
+          <div class="message-group-header">
+            <span class="role-label role-assistant">Assistant</span>
+            <span class="msg-count">(${assistantMessages.length})</span>
+          </div>
+          ${assistantMessages.map(m => `
+            <div class="message-item">
+              <div class="msg-content">${renderMarkdown(m.content)}</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    // Render other messages
+    if (otherMessages.length > 0) {
+      messagesHtml += `
+        <div class="message-group">
+          <div class="message-group-header">
+            <span class="role-label" style="background:#f3f4f6; color:#6b7280;">System</span>
+            <span class="msg-count">(${otherMessages.length})</span>
+          </div>
+          ${otherMessages.map(m => `
+            <div class="message-item">
+              <div class="msg-content">${renderMarkdown(m.content)}</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    // If no messages but has alt content
+    if (messageList.length === 0) {
+      const altContent = extractAgentContent(r);
+      if (altContent) {
+        messagesHtml = `
+          <div class="message-group">
+            <div class="message-group-header">
+              <span class="role-label" style="background:#f3f4f6; color:#6b7280;">Content</span>
+            </div>
+            <div class="message-item">
+              <div class="msg-content">${renderMarkdown(altContent)}</div>
+            </div>
+          </div>
+        `;
+      }
+    }
+  }
+
+  if (!messagesHtml) {
+    messagesHtml = `
+      <div class="detail-empty">
+        <div class="empty-icon">📭</div>
+        <div>No content available</div>
+      </div>
+    `;
+  }
+
+  document.getElementById('d-body').innerHTML = `
+    <h3>Messages (${messageList.length})</h3>
+    ${messagesHtml}
+  `;
 }
 
 function getTypeInfo(type, r) {
