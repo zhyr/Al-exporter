@@ -236,33 +236,21 @@ import fs from 'fs-extra';
  * @param {string} outputDir
  */
 export async function saveRecordsToDir(records, outputDir) {
-  const limit = pLimit(10); // Limit to 10 concurrent writes to avoid EMFILE
+  const limit = pLimit(5); // Even more conservative to avoid EMFILE
 
   await fs.ensureDir(outputDir);
 
-  // 按 source 分组保存
-  const bySource = {};
-  for (const r of records) {
+  const tasks = records.map(r => limit(async () => {
     const src = r.meta?.source || 'unknown';
-    if (!bySource[src]) bySource[src] = [];
-    bySource[src].push(r);
-  }
+    const dir = path.join(outputDir, src);
+    await fs.ensureDir(dir);
 
-  const tasks = [];
-  for (const [source, recs] of Object.entries(bySource)) {
-    const dir = path.join(outputDir, source);
-    tasks.push(limit(async () => {
-      await fs.ensureDir(dir);
-
-      await Promise.all(recs.map(r => limit(async () => {
-        const firstContent = r.messages?.[0]?.content;
-        const id = r.thread_id || (typeof firstContent === 'string' ? firstContent.slice(0, 20) : (firstContent ? JSON.stringify(firstContent).slice(0, 20) : Date.now()));
-        const safeId = String(id).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 50);
-        const filePath = path.join(dir, `${safeId}.json`);
-        await fs.writeFile(filePath, JSON.stringify(r, null, 2));
-      })));
-    }));
-  }
+    const firstContent = r.messages?.[0]?.content;
+    const id = r.thread_id || (typeof firstContent === 'string' ? firstContent.slice(0, 20) : (firstContent ? JSON.stringify(firstContent).slice(0, 20) : Date.now()));
+    const safeId = String(id).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 50);
+    const filePath = path.join(dir, `${safeId}.json`);
+    await fs.writeFile(filePath, JSON.stringify(r, null, 2));
+  }));
   
   await Promise.all(tasks);
 }

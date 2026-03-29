@@ -385,11 +385,102 @@ async function handleStats(req, res) {
   const { input, groupBy = ["project", "source"] } = body;
   const dataDir = input || serverSettings.dataDir || OUTPUT_DIR;
   try {
-    const records = await loadRecordsFromDir(dataDir);
-    respond(res, 200, computeStats(records, groupBy));
+    const stats = await calculateStatsStreaming(dataDir, groupBy);
+    respond(res, 200, stats);
   } catch (err) {
     respond(res, 500, { error: err.message });
   }
+}
+
+/** 
+ * Memory-efficient stats calculation.
+ * Streams through files one by one to avoid OOM.
+ */
+async function calculateStatsStreaming(dir, groupBy) {
+  const groups = {};
+  let total_records = 0;
+  let total_tokens = 0;
+  let total_messages = 0;
+  let user_tokens = 0;
+  let ai_tokens = 0;
+  let max_ai = 0;
+  let max_user = 0;
+
+  try {
+    const subDirs = await fs.readdir(dir);
+    for (const sub of subDirs) {
+      const subPath = path.join(dir, sub);
+      const st = await fs.stat(subPath).catch(() => null);
+      if (!st?.isDirectory()) continue;
+      
+      const files = await fs.readdir(subPath);
+      for (const f of files) {
+        if (!f.endsWith(".json")) continue;
+        try {
+          const record = await fs.readJson(path.join(subPath, f));
+          total_records++;
+          
+          // Basic counters
+          const rTokens = record.meta?.tokens || 0;
+          total_tokens += rTokens;
+          const rMsgs = (record.messages || []).length;
+          total_messages += rMsgs;
+
+          // Token estimation (simplified for speed/memory if not present)
+          let rUserToks = 0;
+          let rAiToks = 0;
+          
+          for (const m of record.messages || []) {
+            const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content || "");
+            const est = Math.ceil(content.length / 4);
+            if (m.role === 'user') rUserToks += est;
+            else rAiToks += est;
+          }
+
+          user_tokens += rUserToks;
+          ai_tokens += rAiToks;
+          max_ai = Math.max(max_ai, rAiToks);
+          max_user = Math.max(max_user, rUserToks);
+
+          // Grouping
+          const keys = groupBy.map((g) => {
+            if (g === "project") return record.meta?.project || "unknown";
+            if (g === "source") return record.meta?.source || "unknown";
+            return "unknown";
+          });
+          const groupKey = keys.join(" | ");
+          
+          if (!groups[groupKey]) {
+            groups[groupKey] = {
+              label: Object.fromEntries(groupBy.map((g, i) => [g, keys[i]])),
+              threads: 0,
+              messages: 0,
+              tokens: 0,
+              user_tokens: 0,
+              ai_tokens: 0
+            };
+          }
+          groups[groupKey].threads++;
+          groups[groupKey].messages += rMsgs;
+          groups[groupKey].tokens += rTokens;
+          groups[groupKey].user_tokens += rUserToks;
+          groups[groupKey].ai_tokens += rAiToks;
+
+        } catch { /* skip broken files */ }
+      }
+    }
+  } catch { /* ignore */ }
+
+  return {
+    total_records,
+    total_tokens,
+    total_messages,
+    user_tokens,
+    ai_tokens,
+    max_ai,
+    max_user,
+    groups: Object.values(groups).sort((a, b) => b.threads - a.threads)
+  };
 }
 
 async function handleImportFile(req, res) {
@@ -601,15 +692,15 @@ function handleJobCancel(req, res, jobId) {
 
 async function handleThreads(req, res, url) {
   const page = parseInt(url.searchParams.get("page") || "1", 10);
-  const size = Math.min(parseInt(url.searchParams.get("size") || "50", 10), 200);
+  const size = parseInt(url.searchParams.get("size") || "20", 10);
   const source = url.searchParams.get("source");
   const search = url.searchParams.get("q")?.toLowerCase();
   const dataDir = serverSettings.dataDir || OUTPUT_DIR;
 
   try {
-    const records = await loadRecordsFromDir(dataDir, { onlyMetadata: true, search, source });
-    const total = records.length;
-    const items = records.slice((page - 1) * size, (page - 1) * size + size);
+    const { items, total } = await loadRecordsPaginated(dataDir, { 
+      page, size, search, source, onlyMetadata: true 
+    });
     respond(res, 200, { total, page, size, items });
 
   } catch (err) {
@@ -669,39 +760,66 @@ async function readBody(req) {
   });
 }
 
-async function loadRecordsFromDir(dir, { onlyMetadata = false, search = null, source = null } = {}) {
-  const records = [];
+/** Efficient listing with filtering and pagination */
+async function loadRecordsPaginated(dir, { page = 1, size = 20, search = null, source = null, onlyMetadata = false }) {
+  const offset = (page - 1) * size;
+  const matches = [];
+  let total = 0;
+
   try {
     const subDirs = await fs.readdir(dir);
+    
+    // Flatten file list for sorting (needed for pagination stability)
+    const allFilePaths = [];
     for (const sub of subDirs) {
       const subPath = path.join(dir, sub);
-      const stat = await fs.stat(subPath).catch(() => null);
-      if (!stat?.isDirectory()) continue;
+      const st = await fs.stat(subPath).catch(() => null);
+      if (!st?.isDirectory()) continue;
       const files = await fs.readdir(subPath);
       for (const f of files) {
-        if (!f.endsWith(".json")) continue;
-        try {
-          const filePath = path.join(subPath, f);
-          const record = await fs.readJson(filePath);
-          
-          // Apply filters early to save memory
-          if (source && record.meta?.source !== source) continue;
-          if (search) {
-            const str = JSON.stringify(record).toLowerCase();
-            if (!str.includes(search)) continue;
-          }
+        if (f.endsWith(".json")) allFilePaths.push(path.join(subPath, f));
+      }
+    }
 
+    // Sort by name or time if possible? Filenames are often related to time in this ecosystem
+    allFilePaths.sort().reverse(); 
+
+    for (const filePath of allFilePaths) {
+      try {
+        const record = await fs.readJson(filePath);
+        
+        // Apply filters
+        if (source && record.meta?.source !== source) continue;
+        if (search) {
+          const combined = (
+            (record.meta?.prompt || "") + 
+            (record.meta?.project || "") + 
+            (record.meta?.file_path || "")
+          ).toLowerCase();
+          if (!combined.includes(search)) continue;
+        }
+
+        total++;
+
+        // Only collect items within the requested page range
+        if (total > offset && matches.length < size) {
           if (onlyMetadata) {
-            // Strip heavy fields for the list view
             delete record.messages;
             delete record.context;
           }
-          records.push(record);
-        } catch { /* skip */ }
-      }
+          matches.push(record);
+        }
+      } catch { /* skip */ }
     }
-  } catch { /* dir may not exist yet */ }
-  return records;
+  } catch { /* ignore dir not found */ }
+
+  return { items: matches, total };
+}
+
+async function loadRecordsFromDir(dir, { onlyMetadata = false, search = null, source = null } = {}) {
+  // Backwards compatibility for stats and other handlers
+  const { items } = await loadRecordsPaginated(dir, { page: 1, size: 100000, search, source, onlyMetadata });
+  return items;
 }
 
 // ─── Server bootstrap ─────────────────────────────────────────────────────────

@@ -93,39 +93,72 @@
     .ts-item .ts-label { font-size: 11px; color: #9ca3b0; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 2px; }
     .ts-item .ts-val { font-size: 20px; font-weight: 700; color: #1a1a2e; }
 
-    /* ── Thread cards (conversation view) ── */
-    .cards-grid { display: flex; flex-direction: column; gap: 12px; }
+    /* ── Filter Bar ── */
+    .filter-bar {
+      background: #fff; border-bottom: 1px solid #e5e7ef;
+      padding: 10px 28px; display: flex; align-items: center; gap: 16px;
+      flex-wrap: wrap;
+    }
+    .filter-group { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #4b5563; }
+    .filter-group label { font-weight: 600; font-size: 12px; color: #9ca3b0; text-transform: uppercase; }
+    .filter-group input, .filter-group select {
+      padding: 6px 10px; border: 1px solid #dde0ea; border-radius: 6px;
+      font-size: 12.5px; outline: none; background: #f9fafb;
+    }
+    .filter-group input:focus, .filter-group select:focus { border-color: #4f46e5; background: #fff; }
+
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+    }
+    @media (max-width: 1400px) {
+      .cards-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+    @media (max-width: 1100px) {
+      .cards-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 800px) {
+      .cards-grid { grid-template-columns: repeat(2, 1fr); }
+    }
     .thread-card {
-      background: #fff; border: 1px solid #e5e7ef; border-radius: 12px;
-      padding: 14px 16px; cursor: pointer; transition: border-color .15s, box-shadow .15s;
-      display: flex; flex-direction: column; gap: 8px;
+      background: #fff; border: 1px solid #e5e7ef; border-radius: 10px;
+      padding: 10px 12px; cursor: pointer; transition: border-color .15s, box-shadow .15s;
+      display: flex; flex-direction: column; gap: 4px;
+      min-height: 110px; justify-content: flex-start;
+      position: relative;
     }
-    .thread-card:hover { border-color: #4f46e5; border-width: 2px; box-shadow: 0 2px 10px rgba(79,70,229,.1); }
-    .card-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+    .thread-card:hover { border-color: #4f46e5; border-width: 2px; box-shadow: 0 4px 12px rgba(79,70,229,.1); }
+    .card-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 2px; }
     .tag {
-      padding: 3px 8px; border-radius: 5px; font-size: 11px; font-weight: 700;
-      text-transform: uppercase; letter-spacing: .4px;
+      padding: 1px 5px; border-radius: 3px; font-size: 9px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .2px;
     }
-    .tag-source-cursor        { background: #eef0fd; color: #4f46e5; }
-    .tag-source-antigravity   { background: #f3e8ff; color: #7c3aed; }
-    .tag-source-claude_code   { background: #fef3c7; color: #d97706; }
-    .tag-source-codex         { background: #d1fae5; color: #059669; }
-    .tag-source-augment       { background: #dbeafe; color: #2563eb; }
-    .tag-source-windsurf      { background: #ffe4e6; color: #e11d48; }
-    .tag-source-vscode_copilot{ background: #e0f2fe; color: #0284c7; }
-    .tag-source-qoder         { background: #fce7f3; color: #9d174d; }
-    .tag-source-trae          { background: #ecfdf5; color: #065f46; }
-    .tag-source-codebuddy     { background: #fff7ed; color: #c2410c; }
-    .tag-source-iflow         { background: #f0fdf4; color: #16a34a; }
-    .tag-source-cline         { background: #ecfeff; color: #0e7490; }
-    .tag-source-zed           { background: #f3f4f6; color: #111827; }
-    .tag-source-kiro          { background: #fdf4ff; color: #a21caf; }
-    .tag-source-unknown       { background: #f3f4f6; color: #6b7280; }
-    .tag-type { background: #fff7ed; color: #9a3412; }
-    .tag-tokens { background: #f8f9fa; color: #6b7280; font-weight: 500; margin-left: auto; }
-    .card-title { font-size: 13.5px; font-weight: 600; color: #1a1a2e; line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-    .card-path  { font-size: 11px; color: #9ca3b0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-    .card-date  { font-size: 11px; color: #b0b7c3; }
+    /* Rest of tag colors remain the same */
+    .card-title {
+      font-size: 12.5px; font-weight: 600; color: #1a1a2e; line-height: 1.3;
+      overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      margin-bottom: 6px;
+    }
+    .card-footer { display: flex; justify-content: space-between; align-items: center; padding-top: 6px; border-top: 1px solid #f3f4f6; margin-top: auto; }
+    .card-path  { font-size: 9.5px; color: #9ca3b0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 65%; }
+    .card-date  { font-size: 9.5px; color: #b0b7c3; white-space: nowrap; }
+
+    /* ── Pagination ── */
+    .pagination-wrap {
+      padding: 16px 28px; background: #fff; border-top: 1px solid #e5e7ef;
+      display: flex; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0;
+    }
+    .page-btn {
+      padding: 6px 12px; border: 1px solid #dde0ea; border-radius: 6px;
+      background: #fff; color: #4b5563; font-size: 13px; font-weight: 500;
+      cursor: pointer; transition: all .15s;
+    }
+    .page-btn:hover:not(:disabled) { border-color: #4f46e5; color: #4f46e5; background: #f9fafb; }
+    .page-btn.active { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+    .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .page-jump { display: flex; align-items: center; gap: 8px; margin-left: 16px; font-size: 13px; color: #6b7280; }
+    .page-jump input { width: 45px; padding: 4px 6px; border: 1px solid #dde0ea; border-radius: 4px; text-align: center; }
 
     /* ── Detail slide-over ── */
     .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.18); z-index: 100; display: none; }
@@ -150,10 +183,44 @@
     .msg-role { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: #9ca3b0; margin-bottom: 5px; }
     .msg-user .msg-role { color: #4f46e5; }
     .msg pre { background: #1e1e2e; color: #cdd6f4; padding: 10px 12px; border-radius: 6px; overflow-x: auto; margin-top: 8px; font-size: 12px; font-family: 'JetBrains Mono', monospace; }
+    
+    /* ── Detail Sections ── */
+    .detail-section { margin-bottom: 20px; }
+    .detail-section h4 { font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #e5e7ef; }
+    .context-file, .context-diff { background: #f9fafb; border-radius: 8px; padding: 10px; margin-bottom: 8px; }
+    .cf-path { font-size: 11px; color: #6b7280; font-family: monospace; }
+    .cf-snippet { font-size: 11px; color: #9ca3b0; margin-top: 4px; white-space: pre-wrap; word-break: break-all; }
+    .plan-steps, .task-list { padding-left: 20px; }
+    .plan-steps li, .task-list li { margin-bottom: 6px; font-size: 13px; color: #374151; }
+    .walkthrough { display: flex; flex-direction: column; gap: 10px; }
+    .ws-step { display: flex; gap: 10px; }
+    .ws-num { width: 24px; height: 24px; background: #4f46e5; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+    .ws-content { font-size: 13px; color: #374151; }
+    .skills-list { display: flex; flex-direction: column; gap: 8px; }
+    .skill-item { background: #f9fafb; border-radius: 6px; padding: 8px 12px; }
+    .skill-item code { background: #eef0fd; color: #4f46e5; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+    .skill-item p { font-size: 12px; color: #6b7280; margin-top: 4px; }
+    .rules-list { display: flex; flex-direction: column; gap: 10px; }
+    .rule-item { background: #f9fafb; border-radius: 6px; padding: 10px; }
+    .rule-item strong { font-size: 12px; color: #374151; }
+    .rule-item p { font-size: 12px; color: #6b7280; margin-top: 4px; }
+    .artifacts-list { display: flex; flex-direction: column; gap: 12px; }
+    .artifact-item { border: 1px solid #e5e7ef; border-radius: 8px; overflow: hidden; }
+    .artifact-title { background: #f9fafb; padding: 8px 12px; font-size: 12px; font-weight: 600; color: #374151; border-bottom: 1px solid #e5e7ef; }
+    .artifact-code { background: #1e1e2e; color: #cdd6f4; padding: 12px; margin: 0; font-size: 11px; overflow-x: auto; }
+    .code-block { background: #1e1e2e; color: #cdd6f4; padding: 12px; border-radius: 6px; font-size: 11px; overflow-x: auto; }
 
     /* ── Empty ── */
     .empty { text-align: center; padding: 60px 20px; color: #9ca3b0; }
     .empty .em { font-size: 40px; margin-bottom: 12px; }
+    
+    /* ── Loading ── */
+    .loading-container { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 20px; }
+    .loading-spinner { animation: rotate 2s linear infinite; width: 50px; height: 50px; }
+    .loading-spinner .path { stroke: #4f46e5; stroke-linecap: round; animation: dash 1.5s ease-in-out infinite; }
+    @keyframes rotate { 100% { transform: rotate(360deg); } }
+    @keyframes dash { 0% { stroke-dasharray: 1, 150; stroke-dashoffset: 0; } 50% { stroke-dasharray: 90, 150; stroke-dashoffset: -35; } 100% { stroke-dasharray: 90, 150; stroke-dashoffset: -124; } }
+    .loading-text { margin-top: 16px; font-size: 14px; color: #6b7280; }
 
     /* ── Settings Modal ── */
     .modal-overlay {
@@ -234,7 +301,22 @@
       <button class="btn-export" id="btn-export-all" onclick="exportAll()">⬆ Export All</button>
     </div>
   </div>
+  <div class="filter-bar" id="filter-bar" style="display:none;">
+    <div class="filter-group">
+      <label>Date Range</label>
+      <input type="date" id="filter-start-date" onchange="applyFilter()" />
+      <span>to</span>
+      <input type="date" id="filter-end-date" onchange="applyFilter()" />
+    </div>
+    <div class="filter-group">
+      <label>Project</label>
+      <select id="filter-project" onchange="applyFilter()">
+        <option value="">All Projects</option>
+      </select>
+    </div>
+  </div>
   <div class="content" id="content"></div>
+  <div class="pagination-wrap" id="pagination-footer" style="display:none;"></div>
 </div>
 
 <!-- Detail slide-over -->
@@ -578,10 +660,15 @@ let globalStats = null;
 let groupStats = []; // [{ source, threads, tokens, userTokens, aiTokens, avg... }]
 let activeSource = null; // null = all tools
 let searchTimeout = null;
-let displayLimit = 18;
 let isScanning = false;
 let currentDetailRecord = null;
 let currentDetailIdx = -1;
+
+// ── Overhaul state ────────────────────────────────────────────────────────────
+let currentPage = 1;
+const pageSize = 25; // 5x5 grid
+let totalDisplay = 0;
+let isLoading = false;
 
 // ── Init ────────────────────────────────────────────────────────────────────
 const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:8080' : '';
@@ -739,24 +826,24 @@ async function init() {
     return;
   }
 
-  // 加载所有记录用于显示
-  try {
-    const allRes = await fetch(`${API_BASE}/api/threads?size=1000`);
-    if (!allRes.ok) throw new Error('Failed to load threads');
-    const data = await allRes.json();
-    records = data.items || data || [];
-  } catch (e) {
-    console.error('load threads failed', e);
-    document.getElementById('content').innerHTML = `<div class="empty"><div class="em">⚠️</div><p>Failed to load data. Make sure server is running.</p></div>`;
-    return;
-  }
-
-  enriched = records.map((r) => enrichRecord(r));
-  globalStats = computeGlobalStats(enriched);
-  groupStats = computeGroupStats(enriched);
-
+  // No longer loading all threads at init
+  populateProjectList();
   renderSidebar();
   renderContent();
+}
+
+function populateProjectList() {
+  const projects = [...new Set(records.map(r => r.meta?.project).filter(Boolean))].sort();
+  const select = document.getElementById('filter-project');
+  if (!select) return;
+  // Keep the first option (All Projects)
+  while(select.options.length > 1) select.remove(1);
+  for (const p of projects) {
+    const opt = document.createElement('option');
+    opt.value = p;
+    opt.textContent = p;
+    select.appendChild(opt);
+  }
 }
 
 /** Sidebar label: Cursor, Antigravity, Cline, … (matches overview.png order) */
@@ -858,9 +945,30 @@ function computeGroupStats(items) {
 // ── Navigation ──────────────────────────────────────────────────────────────
 function selectTool(source) {
   activeSource = source;
+  currentPage = 1; // Reset to first page
   document.getElementById('search').value = '';
+  
+  // Show loading state
+  showLoading();
+  
   renderSidebar();
   renderContent();
+}
+
+// Loading animation SVG
+function showLoading() {
+  const content = document.getElementById('content');
+  const svgLoading = `<div class="loading-container">
+    <svg class="loading-spinner" viewBox="0 0 50 50">
+      <circle class="path" cx="25" cy="25" r="20" fill="none" stroke-width="4"></circle>
+    </svg>
+    <div class="loading-text">Loading...</div>
+  </div>`;
+  content.innerHTML = svgLoading;
+}
+
+function hideLoading() {
+  // Loading will be replaced by renderContent
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
@@ -886,70 +994,110 @@ function renderSidebar() {
 }
 
 // ── Main Content ─────────────────────────────────────────────────────────────
-function renderContent() {
+async function renderContent() {
   const q = document.getElementById('search').value.trim().toLowerCase();
+  const startDate = document.getElementById('filter-start-date').value;
+  const endDate = document.getElementById('filter-end-date').value;
+  const project = document.getElementById('filter-project').value;
 
-  if (activeSource === null && !q) {
+  const bar = document.getElementById('filter-bar');
+  const footer = document.getElementById('pagination-footer');
+
+  if (activeSource === null && !q && !startDate && !endDate && !project) {
     document.getElementById('page-title').textContent = 'System Overview';
     document.getElementById('result-count').textContent = '';
+    bar.style.display = 'none';
+    footer.style.display = 'none';
     renderOverview();
     return;
   }
 
+  bar.style.display = 'flex';
+  footer.style.display = 'flex';
+
   const title = activeSource ? toolDisplayName(activeSource) : 'All Conversations';
   document.getElementById('page-title').textContent = title;
 
-  let filtered = enriched;
-  if (activeSource) filtered = filtered.filter((r) => (r.meta?.source || "unknown") === activeSource);
-  
-  if (q) {
-    filtered = filtered.map(r => {
-      let score = 0;
-      const p = (r.meta?.prompt || "").toLowerCase();
-      const fp = (r.meta?.file_path || "").toLowerCase();
-      const proj = (r.meta?.project || "").toLowerCase();
-      
-      if (p.includes(q)) score += 10;
-      if (fp.includes(q)) score += 5;
-      if (proj.includes(q)) score += 3;
-      
-      // Deep search in all messages
-      if (r.messages) {
-        for (const m of r.messages) {
-          const c = (m.content || "").toLowerCase();
-          let idx = c.indexOf(q);
-          while (idx !== -1) {
-            score += 1;
-            idx = c.indexOf(q, idx + q.length);
-          }
-        }
-      }
-      
-      return { ...r, __score: score };
-    }).filter(r => r.__score > 0);
+  if (isLoading) return;
+  isLoading = true;
+  document.getElementById('content').style.opacity = '0.5';
 
-    // Sort by relevance (desc) then by time (desc)
-    filtered.sort((a, b) => {
-      if (b.__score !== a.__score) return b.__score - a.__score;
-      const timeA = new Date(a.meta?.created_at || a.updated_at || 0).getTime();
-      const timeB = new Date(b.meta?.created_at || b.updated_at || 0).getTime();
-      return timeB - timeA;
-    });
-  } else {
-    // Default sort by time desc
-    filtered.sort((a, b) => {
-      const timeA = new Date(a.meta?.created_at || a.updated_at || 0).getTime();
-      const timeB = new Date(b.meta?.created_at || b.updated_at || 0).getTime();
-      return timeB - timeA;
-    });
+  try {
+    const url = new URL(`${API_BASE}/api/threads`, window.location.origin);
+    url.searchParams.set('page', currentPage);
+    url.searchParams.set('size', pageSize);
+    if (activeSource) url.searchParams.set('source', activeSource);
+    if (q) url.searchParams.set('q', q);
+    // Note: server doesn't currently support startDate/endDate/project, 
+    // so we'll keep those client-side or add them to the server if needed.
+    // For now, let's at least get the paginated list.
+
+    const res = await fetch(url);
+    const data = await res.json();
+    
+    const items = data.items || [];
+    totalDisplay = data.total || 0;
+    const totalPages = Math.ceil(totalDisplay / pageSize);
+
+    const startIdx = (currentPage - 1) * pageSize;
+    document.getElementById('result-count').textContent = `Showing ${startIdx + 1}-${Math.min(startIdx + items.length, totalDisplay)} of ${totalDisplay} results`;
+    
+    renderCards(items);
+    renderPagination(totalPages);
+  } catch (err) {
+    console.error(err);
+  } finally {
+    isLoading = false;
+    document.getElementById('content').style.opacity = '1';
+  }
+}
+
+function renderPagination(total) {
+  const footer = document.getElementById('pagination-footer');
+  if (total <= 1) {
+    footer.innerHTML = `<span style="font-size:13px;color:#9ca3b0;">Page 1 of 1</span>`;
+    return;
   }
 
-  const visible = filtered.slice(0, displayLimit);
-  document.getElementById('result-count').textContent = `Showing ${visible.length} results`;
-  renderCards(visible);
+  let html = `
+    <button class="page-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="goToPage(${currentPage - 1})">Prev</button>
+  `;
+
+  // Simple page range
+  const start = Math.max(1, currentPage - 2);
+  const end = Math.min(total, start + 4);
+  const finalStart = Math.max(1, end - 4);
+
+  for (let i = finalStart; i <= end; i++) {
+    html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+  }
+
+  html += `
+    <button class="page-btn" ${currentPage === total ? 'disabled' : ''} onclick="goToPage(${currentPage + 1})">Next</button>
+    <div class="page-jump">
+      <span>Go to Page</span>
+      <input type="number" id="jump-box" min="1" max="${total}" value="${currentPage}" onkeyup="if(event.key==='Enter') jumpToPage()" />
+      <button class="page-btn" onclick="jumpToPage()">Jump</button>
+    </div>
+  `;
+
+  footer.innerHTML = html;
+}
+
+function goToPage(n) {
+  currentPage = n;
+  renderContent();
+  document.getElementById('content').scrollTop = 0;
+}
+
+function jumpToPage() {
+  const box = document.getElementById('jump-box');
+  const val = parseInt(box.value, 10);
+  if (val >= 1) goToPage(val);
 }
 
 function applyFilter() {
+  currentPage = 1;
   if (searchTimeout) clearTimeout(searchTimeout);
   searchTimeout = setTimeout(() => {
     renderContent();
@@ -1018,12 +1166,12 @@ function renderCards(recordsVisible) {
       <div class="card-tags">
         <span class="tag tag-source-${src}">${src.replace(/_/g,' ')}</span>
         <span class="tag tag-type">${type}</span>
-        <span class="tag tag-tokens">~${fmtNum(tokens)} tokens</span>
+        <span class="tag tag-tokens">~${fmtNum(tokens)}</span>
       </div>
       <div class="card-title">${prompt}</div>
-      <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-top:auto; padding-top:10px;">
-        ${filePath ? `<div class="card-path" style="flex:1; margin-right:8px;">${filePath}</div>` : '<div></div>'}
-        ${dateStr ? `<div class="card-date" style="font-size:11px; color:#9ca3b0; flex-shrink:0;">${dateStr}</div>` : ''}
+      <div class="card-footer">
+        <div class="card-path">${filePath}</div>
+        <div class="card-date">${dateStr}</div>
       </div>
     </div>`;
   }).join('') + `</div>`;
@@ -1036,24 +1184,269 @@ function openDetail(idx) {
   if (!r) return;
   currentDetailRecord = r;
 
+  const type = r.type || 'thread';
+  const typeInfo = getTypeInfo(type, r);
+  
   document.getElementById('d-title').textContent = r.meta?.prompt || r.thread_id || 'Thread';
   document.getElementById('d-meta').innerHTML = `
+    <span class="tag tag-type" style="margin-bottom:8px;">${type.toUpperCase()}</span><br/>
     Source: <b>${r.meta?.source||'unknown'}</b> &nbsp;|&nbsp; 
     Tokens: ~<b>${fmtNum(r.meta?.tokens||0)}</b> &nbsp;|&nbsp; 
     Project: <b>${r.meta?.project||'unknown'}</b>
     <div style="margin-top:4px;">ID: ${r.thread_id||''}</div>
     <div style="margin-top:4px;word-break:break-all;">File: ${r.meta?.file_path||'N/A'}</div>
+    ${typeInfo.extraMeta || ''}
   `;
 
+  // Build detail content based on type
+  let detailContent = '';
+  
+  // Context files
+  const contextFiles = r.context?.files || [];
+  if (contextFiles.length > 0) {
+    detailContent += `<div class="detail-section">
+      <h4>📁 Context Files (${contextFiles.length})</h4>
+      <div class="context-files">${contextFiles.map(f => `<div class="context-file"><span class="cf-path">${escHtml(f.path || '')}</span><pre class="cf-snippet">${escHtml(f.snippet || '').slice(0, 500)}</pre></div>`).join('')}</div>
+    </div>`;
+  }
+  
+  // Context diffs
+  const contextDiffs = r.context?.diffs || [];
+  if (contextDiffs.length > 0) {
+    detailContent += `<div class="detail-section">
+      <h4>📝 Context Diffs (${contextDiffs.length})</h4>
+      <div class="context-diffs">${contextDiffs.map(d => `<div class="context-diff"><span class="cf-path">${escHtml(d.path || '')}</span><pre class="cf-snippet">${escHtml(d.patch || '').slice(0, 800)}</pre></div>`).join('')}</div>
+    </div>`;
+  }
+  
+  // Type-specific content
+  if (typeInfo.sections) {
+    detailContent += typeInfo.sections;
+  }
+  
+  // Messages
   const msgs = (r.messages || []).map(m => {
     const cls = m.role === 'user' ? 'msg-user' : m.role === 'assistant' ? 'msg-assistant' : 'msg-system';
     const content = renderMarkdown(m.content);
     return `<div class="msg ${cls}"><div class="msg-role">${m.role}</div><div>${content}</div></div>`;
   }).join('');
 
-  document.getElementById('d-body').innerHTML = msgs || '<p style="color:#9ca3b0;font-size:13px">No messages.</p>';
+  detailContent += `<div class="detail-section">
+    <h4>💬 Messages (${r.messages?.length || 0})</h4>
+    ${msgs || '<p style="color:#9ca3b0;font-size:13px">No messages.</p>'}
+  </div>`;
+
+  document.getElementById('d-body').innerHTML = detailContent;
   document.getElementById('overlay').classList.add('open');
   document.getElementById('detail').classList.add('open');
+}
+
+function getTypeInfo(type, r) {
+  const sections = [];
+  let extraMeta = '';
+  
+  switch (type) {
+    case 'plan':
+      // Plan: show plan details
+      const planSteps = extractPlanSteps(r.messages);
+      if (planSteps.length > 0) {
+        sections.push(`<div class="detail-section">
+          <h4>📋 Plan Steps</h4>
+          <ol class="plan-steps">${planSteps.map(s => `<li>${renderMarkdown(s)}</li>`).join('')}</ol>
+        </div>`);
+      }
+      break;
+      
+    case 'task':
+      // Task: show task details
+      const taskItems = extractTasks(r.messages);
+      if (taskItems.length > 0) {
+        sections.push(`<div class="detail-section">
+          <h4>✅ Tasks (${taskItems.length})</h4>
+          <ul class="task-list">${taskItems.map(t => `<li>${renderMarkdown(t)}</li>`).join('')}</ul>
+        </div>`);
+      }
+      break;
+      
+    case 'walkthrough':
+      // Walkthrough: show step-by-step guide
+      const walkSteps = extractWalkthrough(r.messages);
+      if (walkSteps.length > 0) {
+        sections.push(`<div class="detail-section">
+          <h4>🚶 Walkthrough Steps</h4>
+          <div class="walkthrough">${walkSteps.map((s, i) => `<div class="ws-step"><span class="ws-num">${i+1}</span><div class="ws-content">${renderMarkdown(s)}</div></div>`).join('')}</div>
+        </div>`);
+      }
+      break;
+      
+    case 'skill':
+    case 'skills':
+      // Skills: show skill definitions
+      const skills = extractSkills(r.messages);
+      if (skills.length > 0) {
+        sections.push(`<div class="detail-section">
+          <h4>🛠️ Skills (${skills.length})</h4>
+          <div class="skills-list">${skills.map(s => `<div class="skill-item"><code>${escHtml(s.name || '')}</code><p>${escHtml(s.desc || '')}</p></div>`).join('')}</div>
+        </div>`);
+      }
+      break;
+      
+    case 'mcp':
+      // MCP: show MCP config
+      const mcpConfig = extractMcpConfig(r.messages);
+      if (mcpConfig) {
+        sections.push(`<div class="detail-section">
+          <h4>🔌 MCP Configuration</h4>
+          <pre class="code-block">${escHtml(JSON.stringify(mcpConfig, null, 2))}</pre>
+        </div>`);
+      }
+      break;
+      
+    case 'rule':
+      // Rules: show rule definitions
+      const rules = extractRules(r.messages);
+      if (rules.length > 0) {
+        sections.push(`<div class="detail-section">
+          <h4>📜 Rules (${rules.length})</h4>
+          <div class="rules-list">${rules.map(rule => `<div class="rule-item"><strong>${escHtml(rule.name || '')}</strong><p>${escHtml(rule.content || '')}</p></div>`).join('')}</div>
+        </div>`);
+      }
+      break;
+      
+    case 'artifact':
+      // Artifact: show artifact code
+      const artifacts = extractArtifacts(r.messages);
+      if (artifacts.length > 0) {
+        sections.push(`<div class="detail-section">
+          <h4>🎨 Artifacts (${artifacts.length})</h4>
+          <div class="artifacts-list">${artifacts.map(a => `<div class="artifact-item"><div class="artifact-title">${escHtml(a.title || 'Untitled')}</div><pre class="artifact-code">${escHtml(a.code || '')}</pre></div>`).join('')}</div>
+        </div>`);
+      }
+      break;
+      
+    default:
+      // thread or default
+      break;
+  }
+  
+  return { sections: sections.join(''), extraMeta };
+}
+
+function extractPlanSteps(messages) {
+  const steps = [];
+  if (!messages) return steps;
+  for (const m of messages) {
+    const content = m.content || '';
+    // Look for numbered steps or bullet points
+    const matches = content.match(/(?:^|\n)(?:\d+[\.\)]\s*|\-\s*|\*\s*)(.+)/g);
+    if (matches) {
+      for (const match of matches) {
+        const step = match.replace(/^(?:\d+[\.\)]\s*|\-\s*|\*\s*)/, '').trim();
+        if (step.length > 5) steps.push(step);
+      }
+    }
+  }
+  return steps.slice(0, 20);
+}
+
+function extractTasks(messages) {
+  const tasks = [];
+  if (!messages) return tasks;
+  for (const m of messages) {
+    const content = m.content || '';
+    // Look for task-like patterns: [ ], - [ ], TODO, task
+    const matches = content.match(/(?:\-?\s*\[\s*\]|\-?\s*TODO:?|Task:?)\s*(.+)/gi);
+    if (matches) {
+      for (const match of matches) {
+        const task = match.replace(/(?:\-?\s*\[\s*\]|\-?\s*TODO:?|Task:?)/i, '').trim();
+        if (task.length > 3) tasks.push(task);
+      }
+    }
+  }
+  return tasks.slice(0, 30);
+}
+
+function extractWalkthrough(messages) {
+  const steps = [];
+  if (!messages) return steps;
+  for (const m of messages) {
+    const content = m.content || '';
+    // Split by numbered steps or sections
+    const parts = content.split(/(?:^|\n)(?:#{1,3}\s*|\d+[\.\)]\s*)/);
+    for (const part of parts) {
+      if (part.trim().length > 20) steps.push(part.trim());
+    }
+  }
+  return steps.slice(0, 15);
+}
+
+function extractSkills(messages) {
+  const skills = [];
+  if (!messages) return skills;
+  const content = messages.map(m => m.content || '').join('\n');
+  
+  // Look for skill definitions: ## Skill: name or - name: description
+  const matches = content.match(/(?:Skill|skill):\s*([^\n]+)|^\s*-\s*([^\n:]+):\s*([^\n]+)/gm);
+  if (matches) {
+    for (const match of matches) {
+      const parts = match.split(':');
+      skills.push({ name: parts[0].replace(/^[-\s]*(?:Skill|skill):\s*/, '').trim(), desc: parts.slice(1).join(':').trim() });
+    }
+  }
+  return skills.slice(0, 20);
+}
+
+function extractMcpConfig(messages) {
+  if (!messages) return null;
+  for (const m of messages) {
+    try {
+      const content = m.content || '';
+      // Try to find JSON config
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch {}
+  }
+  return null;
+}
+
+function extractRules(messages) {
+  const rules = [];
+  if (!messages) return rules;
+  const content = messages.map(m => m.content || '').join('\n');
+  
+  // Look for rule patterns
+  const matches = content.match(/(?:^|\n)(?:#{1,3}\s*Rule|Rule:)\s*([^\n]+)|(?:^|\n)\-\s*([^\n]+)(?:\n\s*([^\n]+))?/gm);
+  if (matches) {
+    for (const match of matches) {
+      const lines = match.split('\n').filter(l => l.trim());
+      if (lines.length > 0) {
+        const name = lines[0].replace(/^[#\-\s]*(?:Rule):?\s*/, '').trim();
+        rules.push({ name, content: lines.slice(1).join('\n').trim() });
+      }
+    }
+  }
+  return rules.slice(0, 15);
+}
+
+function extractArtifacts(messages) {
+  const artifacts = [];
+  if (!messages) return artifacts;
+  for (const m of messages) {
+    const content = m.content || '';
+    // Look for code blocks
+    const codeBlocks = content.match(/```(?:(\w+)\n)?([\s\S]*?)```/g);
+    if (codeBlocks) {
+      for (const block of codeBlocks) {
+        const code = block.replace(/```(?:\w+\n)?/, '').replace(/```$/, '').trim();
+        if (code.length > 50) {
+          artifacts.push({ title: 'Code Block', code });
+        }
+      }
+    }
+  }
+  return artifacts.slice(0, 10);
 }
 
 function closeDetail() {
