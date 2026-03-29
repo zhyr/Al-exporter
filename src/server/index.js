@@ -113,6 +113,10 @@ async function route(req, res) {
   // ── Threads (paginated)
   if (method === "GET" && pathname === "/api/threads") return handleThreads(req, res, url);
 
+  // ── Single thread (full data for detail view)
+  const threadMatch = pathname.match(/^\/api\/thread\/([^/]+)$/);
+  if (method === "GET" && threadMatch) return handleThread(req, res, threadMatch[1]);
+
   // ── Static frontend
   return serveStatic(req, res, pathname);
 }
@@ -706,6 +710,140 @@ async function handleThreads(req, res, url) {
   } catch (err) {
     respond(res, 500, { error: err.message });
   }
+}
+
+async function handleThread(req, res, threadId) {
+  const dataDir = serverSettings.dataDir || OUTPUT_DIR;
+
+  try {
+    // Search for the thread file in all subdirectories
+    const subDirs = await fs.readdir(dataDir);
+    let record = null;
+
+    // First, try to find by thread_id (for normalized data)
+    for (const sub of subDirs) {
+      const subPath = path.join(dataDir, sub);
+      const st = await fs.stat(subPath).catch(() => null);
+      if (!st?.isDirectory()) continue;
+
+      const filePath = path.join(subPath, `${threadId}.json`);
+      try {
+        record = await fs.readJson(filePath);
+        // Check if this is normalized data (has thread_id field)
+        if (record.thread_id === threadId || record.schema_version) {
+          return respond(res, 200, record);
+        }
+      } catch {
+        // File not found in this directory, continue searching
+      }
+    }
+
+    // If not found, search all JSON files for matching thread_id or path
+    for (const sub of subDirs) {
+      const subPath = path.join(dataDir, sub);
+      const st = await fs.stat(subPath).catch(() => null);
+      if (!st?.isDirectory()) continue;
+
+      const files = await fs.readdir(subPath);
+      for (const f of files) {
+        if (!f.endsWith('.json')) continue;
+        const filePath = path.join(subPath, f);
+        try {
+          const content = await fs.readJson(filePath);
+          // Match by thread_id, path (for unnormalized data), or filename
+          if (content.thread_id === threadId ||
+              content.path?.includes(threadId) ||
+              f.replace('.json', '') === threadId) {
+            // If this is unnormalized data, transform it to normalized format
+            if (!content.schema_version) {
+              record = transformToNormalized(content, filePath);
+            } else {
+              record = content;
+            }
+            return respond(res, 200, record);
+          }
+        } catch {
+          // Skip invalid JSON files
+        }
+      }
+    }
+
+    if (!record) {
+      return respond(res, 404, { error: "Thread not found", threadId });
+    }
+
+    respond(res, 200, record);
+
+  } catch (err) {
+    respond(res, 500, { error: err.message });
+  }
+}
+
+// Transform unnormalized data to normalized schema
+function transformToNormalized(raw, filePath) {
+  const path = filePath;
+  const filename = path.split('/').pop().replace('.json', '');
+  const source = path.includes('/.cursor/') ? 'cursor' :
+                 path.includes('/.claude/') ? 'claude_code' :
+                 path.includes('/CodeBuddy') ? 'codebuddy' :
+                 path.includes('/Antigravity') ? 'antigravity' :
+                 path.includes('/Codex') ? 'codex' : 'unknown';
+
+  // Determine type from path
+  let type = 'thread';
+  if (path.includes('/plan') || path.includes('plan.')) type = 'plan';
+  else if (path.includes('/task') || path.includes('task.')) type = 'task';
+  else if (path.includes('/walkthrough')) type = 'walkthrough';
+  else if (path.includes('/artifact')) type = 'artifact';
+  else if (path.includes('/mcp') || path.includes('mcp.json')) type = 'mcp';
+  else if (path.includes('/rule') || path.endsWith('.mdc') || path.endsWith('.cursorrules')) type = 'rule';
+  else if (path.includes('/agent') || path.includes('agent.')) type = 'agent';
+
+  return {
+    schema_version: '1.0.0',
+    thread_id: filename,
+    type,
+    messages: [{
+      role: 'assistant',
+      content: raw.content || ''
+    }],
+    context: { files: [], diffs: [] },
+    meta: {
+      source,
+      project: extractProject(path),
+      created_at: raw.mtime ? new Date(raw.mtime).toISOString() : new Date().toISOString(),
+      updated_at: raw.mtime ? new Date(raw.mtime).toISOString() : new Date().toISOString(),
+      file_path: path,
+      tokens: estimateTokens(raw.content || ''),
+      prompt: extractPrompt(raw.content || '', path),
+      recognition_confidence: 'low'
+    }
+  };
+}
+
+function extractProject(filePath) {
+  const parts = filePath.replace(/\\/g, '/').split('/');
+  const workIdx = parts.findIndex(p => ['work', 'projects', 'workspace', 'repos', 'dev', 'src', 'home'].includes(p.toLowerCase()));
+  if (workIdx >= 0 && parts[workIdx + 1]) return parts[workIdx + 1];
+  return parts[Math.max(0, parts.length - 2)] || 'unknown';
+}
+
+function extractPrompt(content, filePath) {
+  if (content) {
+    const lines = content.split('\n').filter(l => l.trim());
+    if (lines.length > 0) {
+      const first = lines[0].replace(/^#+\s*/, '').trim();
+      if (first.length > 3) return first.slice(0, 100);
+    }
+  }
+  return filePath.split('/').pop().replace('.json', '').replace(/\.\w+$/, '');
+}
+
+function estimateTokens(text) {
+  if (!text) return 0;
+  const cjk = (text.match(/[\u4e00-\u9fff\u3040-\u30ff]/g) || []).length;
+  const latin = text.length - cjk;
+  return Math.ceil(cjk + latin / 4);
 }
 
 // ─── Static file server ───────────────────────────────────────────────────────

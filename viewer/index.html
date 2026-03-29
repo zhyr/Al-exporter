@@ -1181,28 +1181,77 @@ function renderCards(recordsVisible) {
 }
 
 // ── Detail slide-over ────────────────────────────────────────────────────────
-function openDetail(idx) {
+async function openDetail(idx) {
   const r = currentVisible[idx];
   if (!r) return;
-  currentDetailRecord = r;
 
-  const type = r.type || 'thread';
+  // Show loading in drawer
+  document.getElementById('d-body').innerHTML = '<div class="loading-container"><div class="loading-text">Loading...</div></div>';
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('detail').classList.add('open');
+
+  try {
+    // Determine the identifier to use: thread_id or path
+    let identifier = r.thread_id;
+    if (!identifier && r.path) {
+      // For unnormalized data, use the path to generate an ID
+      // Extract filename without extension as fallback ID
+      const pathParts = r.path.split('/');
+      const filename = pathParts[pathParts.length - 1];
+      identifier = filename.replace('.json', '');
+    }
+
+    if (!identifier) {
+      throw new Error('No valid identifier found');
+    }
+
+    // Fetch full record with messages and context
+    const res = await fetch(`${API_BASE}/api/thread/${identifier}`);
+    if (!res.ok) throw new Error('Failed to load thread');
+    const fullRecord = await res.json();
+
+    currentDetailRecord = fullRecord;
+    renderDetailContent(fullRecord);
+  } catch (err) {
+    // Fallback to currentVisible if API fails (for backwards compatibility)
+    console.warn('Failed to fetch full thread, using cached data:', err);
+    currentDetailRecord = r;
+    renderDetailContent(r);
+  }
+}
+
+function renderDetailContent(r) {
+  // Handle both normalized and unnormalized data
+  const type = r.type || detectTypeFromPath(r.meta?.file_path || r.path || '');
   const typeInfo = getTypeInfo(type, r);
-  
-  document.getElementById('d-title').textContent = r.meta?.prompt || r.thread_id || 'Thread';
+
+  // Extract title from various sources
+  const title = r.meta?.prompt ||
+                extractTitleFromContent(r.messages?.[0]?.content || r.content || '') ||
+                r.thread_id ||
+                extractFilename(r.meta?.file_path || r.path || '');
+
+  // Extract source from meta or path
+  const source = r.meta?.source || detectSourceFromPath(r.meta?.file_path || r.path || '');
+  const tokens = r.meta?.tokens || estimateTokens(r.messages?.[0]?.content || r.content || '');
+  const project = r.meta?.project || extractProject(r.meta?.file_path || r.path || '');
+  const filePath = r.meta?.file_path || r.path || 'N/A';
+  const threadId = r.thread_id || extractFilename(r.path || '');
+
+  document.getElementById('d-title').textContent = title;
   document.getElementById('d-meta').innerHTML = `
     <span class="tag tag-type" style="margin-bottom:8px;">${type.toUpperCase()}</span><br/>
-    Source: <b>${r.meta?.source||'unknown'}</b> &nbsp;|&nbsp; 
-    Tokens: ~<b>${fmtNum(r.meta?.tokens||0)}</b> &nbsp;|&nbsp; 
-    Project: <b>${r.meta?.project||'unknown'}</b>
-    <div style="margin-top:4px;">ID: ${r.thread_id||''}</div>
-    <div style="margin-top:4px;word-break:break-all;">File: ${r.meta?.file_path||'N/A'}</div>
+    Source: <b>${source}</b> &nbsp;|&nbsp;
+    Tokens: ~<b>${fmtNum(tokens)}</b> &nbsp;|&nbsp;
+    Project: <b>${project}</b>
+    <div style="margin-top:4px;">ID: ${threadId}</div>
+    <div style="margin-top:4px;word-break:break-all;">File: ${filePath}</div>
     ${typeInfo.extraMeta || ''}
   `;
 
   // Build detail content based on type
   let detailContent = '';
-  
+
   // Context files
   const contextFiles = r.context?.files || [];
   if (contextFiles.length > 0) {
@@ -1211,7 +1260,7 @@ function openDetail(idx) {
       <div class="context-files">${contextFiles.map(f => `<div class="context-file"><span class="cf-path">${escHtml(f.path || '')}</span><pre class="cf-snippet">${escHtml(f.snippet || '').slice(0, 500)}</pre></div>`).join('')}</div>
     </div>`;
   }
-  
+
   // Context diffs
   const contextDiffs = r.context?.diffs || [];
   if (contextDiffs.length > 0) {
@@ -1220,14 +1269,15 @@ function openDetail(idx) {
       <div class="context-diffs">${contextDiffs.map(d => `<div class="context-diff"><span class="cf-path">${escHtml(d.path || '')}</span><pre class="cf-snippet">${escHtml(d.patch || '').slice(0, 800)}</pre></div>`).join('')}</div>
     </div>`;
   }
-  
+
   // Type-specific content
   if (typeInfo.sections) {
     detailContent += typeInfo.sections;
   }
-  
+
   // Messages
-  const msgs = (r.messages || []).map(m => {
+  const messageList = r.messages || [];
+  const msgs = messageList.map(m => {
     const cls = m.role === 'user' ? 'msg-user' : m.role === 'assistant' ? 'msg-assistant' : 'msg-system';
     const content = renderMarkdown(m.content);
     return `<div class="msg ${cls}"><div class="msg-role">${m.role}</div><div>${content}</div></div>`;
@@ -1235,21 +1285,20 @@ function openDetail(idx) {
 
   // If no messages, try to show content from other fields
   let messageSection = msgs;
-  if (!messageSection) {
+  if (messageList.length === 0) {
     const altContent = extractAgentContent(r);
     if (altContent) {
       messageSection = `<div class="msg msg-system"><div class="msg-role">content</div><div>${renderMarkdown(altContent)}</div></div>`;
     }
   }
 
+  const msgCount = messageList.length;
   detailContent += `<div class="detail-section">
-    <h4>💬 Messages (${r.messages?.length || 0})</h4>
+    <h4>💬 Messages (${msgCount})</h4>
     ${messageSection || '<p style="color:#9ca3b0;font-size:13px">No content available.</p>'}
   </div>`;
 
   document.getElementById('d-body').innerHTML = detailContent;
-  document.getElementById('overlay').classList.add('open');
-  document.getElementById('detail').classList.add('open');
 }
 
 function getTypeInfo(type, r) {
@@ -1552,6 +1601,65 @@ function renderMarkdown(text) {
   // Newlines
   html = html.replace(/\n/g, '<br/>');
   return html;
+}
+
+// Helper functions for data extraction
+function extractTitleFromContent(content) {
+  if (!content) return '';
+  const lines = content.split('\n').filter(l => l.trim());
+  if (lines.length > 0) {
+    const first = lines[0].replace(/^#+\s*/, '').trim();
+    if (first.length > 3) return first.slice(0, 100);
+  }
+  return '';
+}
+
+function extractFilename(filePath) {
+  if (!filePath) return '';
+  const parts = filePath.split('/');
+  const filename = parts[parts.length - 1];
+  return filename.replace(/\.\w+$/, '').replace(/_\d+$/, '');
+}
+
+function detectTypeFromPath(filePath) {
+  if (!filePath) return 'thread';
+  const p = filePath.toLowerCase();
+  if (p.includes('/plan') || p.includes('plan.')) return 'plan';
+  if (p.includes('/task') || p.includes('task.')) return 'task';
+  if (p.includes('/walkthrough')) return 'walkthrough';
+  if (p.includes('/artifact')) return 'artifact';
+  if (p.includes('/mcp') || p.includes('mcp.json')) return 'mcp';
+  if (p.includes('/rule') || p.endsWith('.mdc') || p.endsWith('.cursorrules')) return 'rule';
+  if (p.includes('/agent') || p.includes('agent.')) return 'agent';
+  return 'thread';
+}
+
+function detectSourceFromPath(filePath) {
+  if (!filePath) return 'unknown';
+  if (filePath.includes('/.cursor/') || filePath.includes('/Cursor/')) return 'cursor';
+  if (filePath.includes('/.claude/') || filePath.includes('/Claude/')) return 'claude_code';
+  if (filePath.includes('/CodeBuddy')) return 'codebuddy';
+  if (filePath.includes('/Antigravity')) return 'antigravity';
+  if (filePath.includes('/Codex')) return 'codex';
+  if (filePath.includes('/Cline') || filePath.includes('/.cline/')) return 'cline';
+  if (filePath.includes('/Augment')) return 'augment';
+  if (filePath.includes('/Trae')) return 'trae';
+  return 'unknown';
+}
+
+function extractProject(filePath) {
+  if (!filePath) return 'unknown';
+  const parts = filePath.replace(/\\/g, '/').split('/');
+  const workIdx = parts.findIndex(p => ['work', 'projects', 'workspace', 'repos', 'dev', 'src', 'home'].includes(p.toLowerCase()));
+  if (workIdx >= 0 && parts[workIdx + 1]) return parts[workIdx + 1];
+  return parts[Math.max(0, parts.length - 2)] || 'unknown';
+}
+
+function estimateTokens(text) {
+  if (!text) return 0;
+  const cjk = (text.match(/[\u4e00-\u9fff\u3040-\u30ff]/g) || []).length;
+  const latin = text.length - cjk;
+  return Math.ceil(cjk + latin / 4);
 }
 
 function copyCurrentThread() {
