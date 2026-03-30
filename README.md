@@ -73,6 +73,9 @@ npm install
 #### 命令行
 
 ```bash
+# 设置工作区
+npm install
+
 # 扫描所有支持的工具
 node index.js scan
 
