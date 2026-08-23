@@ -158,6 +158,50 @@ AI-exporter/
 
 **数据存储**：`./agent-backup/transfer2eval/`（episodes / tasks / datasets，JSON 持久化，含 provenance 溯源链）。
 
+**CLI 子命令**：
+
+| 子命令 | 说明 |
+|--------|------|
+| `pipeline` | 运行完整流水线（扫描→挖掘→门控→构建→验证→校准→导出） |
+| `mine` | 仅挖掘 episodes + 证据排序 + 门控 |
+| `status` | 管线统计与状态分布 |
+| `list` | 列出 episodes（`--status` / `--source` 过滤） |
+| `gate` | 人工门控（`--episode` + `--decision accept/review/reject`） |
+| `annotate` | 标注/评论/修改（`--episode` + `--label` + `--content`） |
+| `build` | 构建指定 task（可回放任务/偏好/RL/奖励） |
+| `verify` | 对指定 task 执行审计验证 |
+| `calibrate` | 对指定 task 执行难度校准 |
+| `export` | 导出数据集（`--format eval/cms_sft/cms_dpo/all`） |
+
+示例：
+
+```bash
+node src/cli.js t2e pipeline --input ./agent-backup
+node src/cli.js t2e mine --input ./agent-backup --json
+node src/cli.js t2e gate --episode ep-xxxx --decision accept
+node src/cli.js t2e annotate --episode ep-xxxx --label valid --content "ok"
+node src/cli.js t2e export --format all --split candidate_generated
+```
+
+**REST API（`/api/t2e/*`）**：
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| GET | `/api/t2e/status` | 管线状态统计 |
+| POST | `/api/t2e/pipeline` | 运行完整流水线（异步 job） |
+| POST | `/api/t2e/mine` | 挖掘 + 证据 + 门控（异步 job） |
+| GET | `/api/t2e/episodes` | 列出 episodes（分页/状态过滤） |
+| GET | `/api/t2e/episodes/:id` | 单 episode 详情 |
+| POST | `/api/t2e/episodes/:id/gate` | 人工门控 |
+| POST | `/api/t2e/episodes/:id/annotate` | 人工标注/评论/修改 |
+| GET | `/api/t2e/tasks` | 列出 tasks |
+| GET | `/api/t2e/tasks/:id` | 单 task 详情 |
+| POST | `/api/t2e/tasks/:id/build` | 构建任务 |
+| POST | `/api/t2e/tasks/:id/verify` | 审计验证 |
+| POST | `/api/t2e/tasks/:id/calibrate` | 难度校准 |
+| POST | `/api/t2e/export` | 导出数据集（eval/cms_sft/cms_dpo/all） |
+| GET | `/api/t2e/datasets` | 已导出数据集清单 |
+
 ### 更新日志
 
 #### v2.1.0
@@ -325,6 +369,50 @@ Compile sessions from 17+ tools into **replayable tasks / preference data / RL e
 **Web**: run `npm run serve`, open `http://127.0.0.1:8080`, use the "🧠 Transfer2Eval" topbar menu (API + annotation panel).
 
 **Storage**: `./agent-backup/transfer2eval/` (episodes / tasks / datasets, JSON persistence with provenance chain).
+
+**CLI subcommands**:
+
+| Subcommand | Description |
+|------------|-------------|
+| `pipeline` | Run the full pipeline (scan → mine → gate → build → verify → calibrate → export) |
+| `mine` | Mine episodes + evidence ranking + gating only |
+| `status` | Pipeline stats and status distribution |
+| `list` | List episodes (filter by `--status` / `--source`) |
+| `gate` | Manual gating (`--episode` + `--decision accept/review/reject`) |
+| `annotate` | Annotation/comment/fix (`--episode` + `--label` + `--content`) |
+| `build` | Build a task (replay / preference / RL / reward) |
+| `verify` | Run audit verification on a task |
+| `calibrate` | Difficulty calibration on a task |
+| `export` | Export datasets (`--format eval/cms_sft/cms_dpo/all`) |
+
+Examples:
+
+```bash
+node src/cli.js t2e pipeline --input ./agent-backup
+node src/cli.js t2e mine --input ./agent-backup --json
+node src/cli.js t2e gate --episode ep-xxxx --decision accept
+node src/cli.js t2e annotate --episode ep-xxxx --label valid --content "ok"
+node src/cli.js t2e export --format all --split candidate_generated
+```
+
+**REST API (`/api/t2e/*`)**:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/t2e/status` | Pipeline status stats |
+| POST | `/api/t2e/pipeline` | Run full pipeline (async job) |
+| POST | `/api/t2e/mine` | Mine + evidence + gate (async job) |
+| GET | `/api/t2e/episodes` | List episodes (paged / status filter) |
+| GET | `/api/t2e/episodes/:id` | Episode detail |
+| POST | `/api/t2e/episodes/:id/gate` | Manual gating |
+| POST | `/api/t2e/episodes/:id/annotate` | Annotation / comment / fix |
+| GET | `/api/t2e/tasks` | List tasks |
+| GET | `/api/t2e/tasks/:id` | Task detail |
+| POST | `/api/t2e/tasks/:id/build` | Build task |
+| POST | `/api/t2e/tasks/:id/verify` | Audit verification |
+| POST | `/api/t2e/tasks/:id/calibrate` | Difficulty calibration |
+| POST | `/api/t2e/export` | Export datasets (eval/cms_sft/cms_dpo/all) |
+| GET | `/api/t2e/datasets` | List exported datasets |
 
 ### Changelog
 
