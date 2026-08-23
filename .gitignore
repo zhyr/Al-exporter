@@ -21,6 +21,7 @@ agent-backup-test/
 docs/
 *.log
 viewer/data.js
+AI-Exporter2Eval梳理和对齐.md
 
 # Test coverage
 coverage/

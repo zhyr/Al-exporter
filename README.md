@@ -2,6 +2,8 @@
 
 > 一键扫描、备份、导出 AI 编码工具对话数据，支持 26+ 主流 Agent，数据可转换为 Markdown/JSON/训练格式，赋能 AI 训练与跨工具迁移。
 
+**Version 2.1.0** · MIT License
+
 [中文](#中文)  | [English](#english)
 
 ![Overview](overview.png)
@@ -136,6 +138,34 @@ AI-exporter/
 | POST | `/api/import-to-agent` | 导入到 Agent |
 | GET | `/api/agents` | 支持的 Agent 列表 |
 | GET | `/api/stats` | 统计数据 |
+
+### Transfer2Eval（会话轨迹 → 评估数据集）
+
+将 17+ 工具的会话轨迹编译为**可回放任务 / 偏好数据 / RL 环境 / 执行奖励候选**，输出可直接用于评估与训练的数据集：
+
+- **挖掘**：从会话中提取独立任务段（含延续消息合并），构建可回放轨迹
+- **证据排序**：基于交互深度、执行痕迹、覆盖度等 5 维证据打分
+- **门控路由**：按证据分数自动路由到 accept / review / reject
+- **构建**：编译为任务、偏好、RL 环境、奖励四类数据集
+- **双状态验证**：运行时一致性 + 离线静态验证（含危险命令 / 敏感信息 / 泄露检测）
+- **难度校准**：基于上下文长度与证据强度自动估算难度等级
+- **人工标注**：Web 界面逐条标注（标签 / 内容 / 修正 Prompt / 修正 ground_truth）
+- **导出**：Eval CSV（12 列）与 SFT / DPO JSONL，附带幂等 SHA-256 manifest
+
+**CLI**：`node src/cli.js t2e`（子命令：`mine` / `build` / `verify` / `calibrate` / `export` / `annotate` / `stats`）
+
+**Web**：启动 `npm run serve` 后访问 `http://127.0.0.1:8080`，「🧠 Transfer2Eval」菜单，含 API 与标注面板。
+
+**数据存储**：`./agent-backup/transfer2eval/`（episodes / tasks / datasets，JSON 持久化，含 provenance 溯源链）。
+
+### 更新日志
+
+#### v2.1.0
+
+- 新增 **Transfer2Eval** 模块：将 17+ 工具的会话轨迹编译为可回放任务 / 偏好数据 / RL 环境 / 执行奖励候选（证据排序 → 门控路由 → 构建 → 双状态验证 → 难度校准 → 人工标注 → 数据集导出）。
+- Web 界面新增「🧠 Transfer2Eval」顶部菜单与 `/api/t2e/*` REST API；标注弹窗自动回填对应 episode 的标签、内容、Prompt 与 ground_truth。
+- 规范化增强：JSONL 整行数组解析、延续消息（"keep going" 等）并入当前任务段，避免碎段误判。
+- 数据集导出支持 Eval CSV（12 列）与 SFT/DPO JSONL，附带幂等 SHA-256 manifest。
 
 ### 开发
 
@@ -276,6 +306,34 @@ AI-exporter/
 | POST | `/api/import-to-agent` | Import to agent |
 | GET | `/api/agents` | List supported agents |
 | GET | `/api/stats` | Statistics |
+
+### Transfer2Eval (Session → Eval Datasets)
+
+Compile sessions from 17+ tools into **replayable tasks / preference data / RL environments / execution-reward candidates** for evaluation and training:
+
+- **Mining**: extract self-contained task segments (with continuation-message merging) into replayable trajectories
+- **Evidence ranking**: score on 5 dimensions (interaction depth, execution traces, coverage, ...)
+- **Gate routing**: auto-route to accept / review / reject based on evidence score
+- **Build**: compile tasks, preference, RL-environment and reward datasets
+- **Dual-state verification**: runtime consistency + offline static checks (dangerous commands / sensitive info / leakage detection)
+- **Difficulty calibration**: estimate difficulty level from context length and evidence strength
+- **Human annotation**: per-episode labeling (label / content / prompt fix / ground_truth fix) in the web UI
+- **Export**: Eval CSV (12 columns) and SFT / DPO JSONL with idempotent SHA-256 manifest
+
+**CLI**: `node src/cli.js t2e` (subcommands: `mine` / `build` / `verify` / `calibrate` / `export` / `annotate` / `stats`)
+
+**Web**: run `npm run serve`, open `http://127.0.0.1:8080`, use the "🧠 Transfer2Eval" topbar menu (API + annotation panel).
+
+**Storage**: `./agent-backup/transfer2eval/` (episodes / tasks / datasets, JSON persistence with provenance chain).
+
+### Changelog
+
+#### v2.1.0
+
+- Added **Transfer2Eval**: compiles sessions from 17+ tools into replayable tasks / preference data / RL environments / reward candidates (evidence ranking → gate routing → build → dual-state verification → difficulty calibration → human annotation → dataset export).
+- Added "🧠 Transfer2Eval" topbar menu and `/api/t2e/*` REST API; annotation modal auto-fills label, content, prompt and ground_truth from the selected episode.
+- Normalization: JSONL array-line parsing and continuation-message merging ("keep going" etc.) to avoid fragmenting sessions.
+- Dataset export: Eval CSV (12 columns) and SFT/DPO JSONL with idempotent SHA-256 manifest.
 
 ### Development
 

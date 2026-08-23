@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Transfer2Eval — AI Exporter</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+    background: #f1f3f8; color: #1a1a2e; min-height: 100vh;
+  }
+  .topbar {
+    background: #fff; border-bottom: 1px solid #e5e7ef;
+    padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 50;
+  }
+  .topbar h1 { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .badge { background: #eef0fd; color: #4f46e5; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 12px; }
+  .topbar-right { display: flex; gap: 10px; align-items: center; }
+  .btn {
+    background: #f2f2f2; color: #111827; border: 1px solid #e5e7eb;
+    padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: background .15s;
+  }
+  .btn:hover { background: #e5e5e5; }
+  .btn.primary { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+  .btn.primary:hover { background: #4338ca; }
+  .btn.danger { background: #fee2e2; color: #b91c1c; border-color: #fecaca; }
+  .btn.small { padding: 4px 10px; font-size: 12px; }
+  .btn:disabled { opacity: .5; cursor: wait; }
+  .container { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+
+  /* Stats */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .stat-card { background: #fff; border: 1px solid #e5e7ef; border-radius: 12px; padding: 14px 16px; }
+  .stat-card .label { font-size: 11px; font-weight: 600; color: #9ca3b0; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+  .stat-card .value { font-size: 22px; font-weight: 700; color: #4f46e5; }
+  .stat-card .sub { font-size: 11px; color: #9ca3b0; margin-top: 4px; }
+
+  /* Pipeline stepper */
+  .stepper { display: flex; gap: 4px; background: #fff; border: 1px solid #e5e7ef; border-radius: 12px; padding: 10px 14px; margin-bottom: 20px; overflow-x: auto; }
+  .step { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #9ca3b0; white-space: nowrap; padding: 4px 8px; border-radius: 8px; }
+  .step.done { color: #059669; background: #ecfdf5; }
+  .step.active { color: #4f46e5; background: #eef0fd; font-weight: 600; }
+  .step.fail { color: #b91c1c; background: #fee2e2; }
+  .step-arrow { color: #d1d5db; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .tab {
+    padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    background: #fff; border: 1px solid #e5e7ef; color: #4b5563; cursor: pointer;
+  }
+  .tab.active { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+  th { text-align: left; font-size: 11px; font-weight: 700; color: #9ca3b0; text-transform: uppercase; letter-spacing: .5px; padding: 12px 14px; background: #fafbfd; border-bottom: 1px solid #e5e7ef; }
+  td { padding: 10px 14px; font-size: 13px; border-bottom: 1px solid #f1f2f7; vertical-align: top; }
+  tr:hover td { background: #fafbfd; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .tag.mined { background: #eef0fd; color: #4f46e5; }
+  .tag.gated { background: #ecfdf5; color: #059669; }
+  .tag.built { background: #fef3c7; color: #b45309; }
+  .tag.verified { background: #d1fae5; color: #047857; }
+  .tag.calibrated { background: #ede9fe; color: #6d28d9; }
+  .tag.exported { background: #dbeafe; color: #1d4ed8; }
+  .tag.rejected { background: #fee2e2; color: #b91c1c; }
+  .tag.failed { background: #fee2e2; color: #b91c1c; }
+  .score-bar { display: inline-block; width: 60px; height: 6px; background: #e5e7ef; border-radius: 3px; vertical-align: middle; margin-right: 6px; }
+  .score-bar > i { display: block; height: 100%; border-radius: 3px; background: #4f46e5; }
+
+  /* Detail view */
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .card { background: #fff; border: 1px solid #e5e7ef; border-radius: 12px; padding: 16px; }
+  .card h3 { font-size: 14px; font-weight: 700; margin-bottom: 10px; color: #1a1a2e; }
+  .card pre { background: #f7f8fc; border: 1px solid #eef0f6; border-radius: 8px; padding: 10px; font-size: 12px; overflow: auto; max-height: 300px; }
+  .card .kv { font-size: 12px; color: #6b7280; line-height: 1.8; }
+  .card .kv b { color: #1a1a2e; }
+
+  .modal-overlay.hidden { display: none; }
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .modal {
+    background: #fff; border-radius: 14px; padding: 20px; width: min(560px, 92vw);
+    max-height: 86vh; overflow: auto;
+  }
+  .modal h3 { font-size: 15px; margin-bottom: 12px; }
+  .modal label { display: block; font-size: 12px; font-weight: 600; color: #6b7280; margin: 10px 0 4px; }
+  .modal textarea, .modal input, .modal select {
+    width: 100%; padding: 8px 10px; border: 1px solid #dde0ea; border-radius: 8px;
+    font-size: 13px; outline: none; font-family: inherit;
+  }
+  .modal textarea { min-height: 90px; resize: vertical; }
+  .modal-row { display: flex; gap: 10px; margin-top: 14px; justify-content: flex-end; }
+  .msg { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin: 10px 0; }
+  .msg.info { background: #eef0fd; color: #3730a3; }
+  .msg.ok { background: #ecfdf5; color: #065f46; }
+  .msg.err { background: #fee2e2; color: #991b1b; }
+  #log { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: #fff; border: 1px solid #e5e7ef; border-radius: 12px; padding: 12px; max-height: 240px; overflow: auto; line-height: 1.6; }
+  #log .ok { color: #059669; }
+  #log .err { color: #b91c1c; }
+  #log .info { color: #4f46e5; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>🧠 Transfer2Eval <span class="badge">EvoTrace-style</span></h1>
+  <div class="topbar-right">
+    <span style="font-size:12px;color:#9ca3b0;" id="last-refresh"></span>
+    <button class="btn" onclick="refreshStatus()">刷新</button>
+    <button class="btn primary" id="btn-pipeline" onclick="runPipeline()">▶ 运行完整流水线</button>
+    <button class="btn" onclick="location.href='/'" title="返回 AI Exporter 主界面">← 返回主界面</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="msg info" id="welcome-msg" style="display:none;"></div>
+
+  <!-- 统计 -->
+  <div class="stats-grid" id="stats-grid"></div>
+
+  <!-- 流水线步骤 -->
+  <div class="stepper" id="stepper"></div>
+
+  <!-- 日志 -->
+  <div id="log"></div>
+
+  <div style="height:16px;"></div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" data-panel="episodes" onclick="switchTab('episodes')">Episodes（挖掘结果）</div>
+    <div class="tab" data-panel="tasks" onclick="switchTab('tasks')">Tasks（构建产物）</div>
+    <div class="tab" data-panel="datasets" onclick="switchTab('datasets')">导出数据集</div>
+    <div class="tab" data-panel="detail" onclick="switchTab('detail')">详情 / 标注</div>
+  </div>
+
+  <!-- Episodes -->
+  <div class="panel active" id="panel-episodes">
+    <div style="display:flex;gap:10px;margin-bottom:12px;align-items:center;flex-wrap:wrap;">
+      <select id="ep-filter-status" onchange="loadEpisodes(1)">
+        <option value="">全部状态</option>
+        <option value="mined">mined</option>
+        <option value="gated">gated</option>
+        <option value="built">built</option>
+        <option value="verified">verified</option>
+        <option value="calibrated">calibrated</option>
+        <option value="exported">exported</option>
+        <option value="rejected">rejected</option>
+        <option value="failed">failed</option>
+      </select>
+      <button class="btn small" onclick="runMineOnly()">🔍 仅挖掘+门控</button>
+      <span style="font-size:12px;color:#9ca3b0;" id="ep-count"></span>
+    </div>
+    <table>
+      <thead><tr>
+        <th style="width:40px;">#</th>
+        <th>标题 / Prompt</th>
+        <th>来源</th>
+        <th>证据分</th>
+        <th>状态</th>
+        <th>门控</th>
+        <th>验证</th>
+        <th style="width:220px;">操作</th>
+      </tr></thead>
+      <tbody id="ep-table"></tbody>
+    </table>
+    <div id="ep-pagination" style="display:flex;gap:8px;margin-top:12px;align-items:center;">
+      <button class="btn small" onclick="loadEpisodes(page-1)">← 上一页</button>
+      <span id="ep-page" style="font-size:12px;color:#6b7280;"></span>
+      <button class="btn small" onclick="loadEpisodes(page+1)">下一页 →</button>
+    </div>
+  </div>
+
+  <!-- Tasks -->
+  <div class="panel" id="panel-tasks">
+    <table>
+      <thead><tr>
+        <th>Task ID</th>
+        <th>标题</th>
+        <th>回放步骤</th>
+        <th>奖励候选</th>
+        <th>偏好</th>
+        <th>RL 环境</th>
+        <th>Eval 元信息</th>
+        <th style="width:240px;">操作</th>
+      </tr></thead>
+      <tbody id="task-table"></tbody>
+    </table>
+  </div>
+
+  <!-- Datasets -->
+  <div class="panel" id="panel-datasets">
+    <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+      <span style="font-size:13px;font-weight:600;">导出到下游：</span>
+      <select id="export-split">
+        <option value="candidate_generated">candidate_generated</option>
+        <option value="seed_train">seed_train</option>
+        <option value="dev_eval">dev_eval</option>
+        <option value="private_test">private_test</option>
+      </select>
+      <button class="btn primary" onclick="doExport()">导出数据集（Eval CSV + SFT + DPO）</button>
+    </div>
+    <div class="msg info">
+      导出产物：<code>questions.csv</code>（Eval 12 列）、
+      <code>sft_prompt_response.jsonl</code>（KnowledgeBase SFT）、
+      <code>dpo_prompt_chosen_rejected.jsonl</code>（KnowledgeBase DPO），并附带幂等 manifest。
+    </div>
+    <div id="dataset-list"></div>
+  </div>
+
+  <!-- Detail / Annotate -->
+  <div class="panel" id="panel-detail">
+    <div class="msg info">从 Episodes 列表点击「查看」或「标注」进入。选择一个 episode 后，可在此审阅消息、证据、任务产物、验证报告，并追加人工标注与修改。</div>
+    <div id="detail-content"></div>
+  </div>
+</div>
+
+<!-- 标注 Modal -->
+<div class="modal-overlay hidden" id="annotate-modal" onclick="closeModal('annotate-modal')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h3>人工标注 / 评论 / 修改</h3>
+    <label>Episode ID</label>
+    <input id="ann-episode" readonly />
+    <label>标注标签</label>
+    <select id="ann-label">
+      <option value="comment">评论</option>
+      <option value="valid">valid（有效）</option>
+      <option value="invalid">invalid（无效）</option>
+      <option value="needs_fix">needs_fix（需修复）</option>
+    </select>
+    <label>内容（评论 / 修改说明）</label>
+    <textarea id="ann-content" placeholder="评审意见、修改说明..."></textarea>
+    <label>修改 Prompt（可选）</label>
+    <textarea id="ann-prompt" placeholder="留空则不修改"></textarea>
+    <label>修改 ground_truth（可选）</label>
+    <textarea id="ann-truth" placeholder="留空则不修改"></textarea>
+    <div class="modal-row">
+      <button class="btn" onclick="closeModal('annotate-modal')">取消</button>
+      <button class="btn primary" onclick="submitAnnotation()">提交标注</button>
+    </div>
+  </div>
+</div>
+
+<!-- 门控 Modal -->
+<div class="modal-overlay hidden" id="gate-modal" onclick="closeModal('gate-modal')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h3>人工门控决策</h3>
+    <label>Episode ID</label>
+    <input id="gate-episode" readonly />
+    <label>决策</label>
+    <select id="gate-decision">
+      <option value="accept">accept（接受，进入构建）</option>
+      <option value="review">review（待复核）</option>
+      <option value="reject">reject（拒绝 / 失败关闭）</option>
+    </select>
+    <label>备注</label>
+    <textarea id="gate-note" placeholder="决策理由..."></textarea>
+    <div class="modal-row">
+      <button class="btn" onclick="closeModal('gate-modal')">取消</button>
+      <button class="btn primary" onclick="submitGate()">确认</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = window.location.protocol === 'file:' ? 'http://127.0.0.1:8080' : '';
+const STAGES = ['mined', 'gated', 'built', 'verified', 'calibrated', 'exported'];
+let page = 1;
+let currentEpisode = null;
+let currentTask = null;
+
+function log(msg, cls = 'info') {
+  const el = document.getElementById('log');
+  const line = document.createElement('div');
+  line.className = cls;
+  line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  el.prepend(line);
+  while (el.children.length > 60) el.lastChild.remove();
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(`${API}${path}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...opts,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  return data;
+}
+
+// ── 状态 / 统计 ──
+async function refreshStatus() {
+  try {
+    const { stats, enums } = await api('/api/t2e/status');
+    renderStats(stats);
+    renderStepper(stats);
+    document.getElementById('last-refresh').textContent = `更新于 ${new Date().toLocaleTimeString()}`;
+    document.getElementById('btn-pipeline').disabled = false;
+  } catch (e) {
+    log(`状态获取失败: ${e.message}`, 'err');
+    document.getElementById('btn-pipeline').disabled = true;
+  }
+}
+
+function renderStats(stats) {
+  const grid = document.getElementById('stats-grid');
+  const order = ['mined', 'gated', 'built', 'verified', 'calibrated', 'exported', 'rejected', 'failed'];
+  let html = `
+    <div class="stat-card"><div class="label">Episodes 总数</div><div class="value">${stats.episodes}</div><div class="sub">来源工具: ${Object.keys(stats.bySource || {}).length}</div></div>
+    <div class="stat-card"><div class="label">Tasks</div><div class="value">${stats.tasks}</div></div>`;
+  for (const s of order) {
+    const c = (stats.byStatus || {})[s] || 0;
+    html += `<div class="stat-card"><div class="label">${s}</div><div class="value" style="color:${s==='rejected'||s==='failed'?'#b91c1c':''}">${c}</div></div>`;
+  }
+  grid.innerHTML = html;
+}
+
+function renderStepper(stats) {
+  const byStatus = stats.byStatus || {};
+  let html = '';
+  for (let i = 0; i < STAGES.length; i++) {
+    const s = STAGES[i];
+    const count = byStatus[s] || 0;
+    const cls = count > 0 ? 'done' : '';
+    html += `<div class="step ${cls}">${i+1}. ${s} (${count})</div>`;
+    if (i < STAGES.length - 1) html += `<div class="step-arrow">→</div>`;
+  }
+  const failed = byStatus.failed || 0;
+  const rejected = byStatus.rejected || 0;
+  if (failed > 0 || rejected > 0) {
+    html += `<div class="step-arrow">→</div><div class="step fail">⛔ fail-closed (rejected=${rejected}, failed=${failed})</div>`;
+  }
+  document.getElementById('stepper').innerHTML = html;
+}
+
+// ── 流水线 ──
+async function runPipeline() {
+  const btn = document.getElementById('btn-pipeline');
+  btn.disabled = true;
+  log('启动完整流水线（mine → gate → build → verify → calibrate → export）...', 'info');
+  try {
+    await api('/api/t2e/pipeline', { method: 'POST', body: JSON.stringify({ useBackup: true }) });
+    log('流水线已提交，正在后台执行（查看终端日志）...', 'ok');
+    // 轮询等待
+    setTimeout(async () => {
+      await refreshStatus();
+      await loadEpisodes(1);
+      await loadTasks();
+      btn.disabled = false;
+    }, 3000);
+  } catch (e) {
+    log(`流水线启动失败: ${e.message}`, 'err');
+    btn.disabled = false;
+  }
+}
+
+async function runMineOnly() {
+  log('执行挖掘 + 证据排序 + 门控...', 'info');
+  try {
+    await api('/api/t2e/mine', { method: 'POST', body: JSON.stringify({}) });
+    log('挖掘已提交，后台执行中...', 'ok');
+    setTimeout(async () => { await refreshStatus(); await loadEpisodes(1); }, 2000);
+  } catch (e) { log(`挖掘失败: ${e.message}`, 'err'); }
+}
+
+// ── Episodes ──
+async function loadEpisodes(p) {
+  if (p < 1) p = 1;
+  page = p;
+  const status = document.getElementById('ep-filter-status').value;
+  const qs = new URLSearchParams({ page, size: 30, status });
+  try {
+    const data = await api(`/api/t2e/episodes?${qs}`);
+    document.getElementById('ep-count').textContent = `共 ${data.total} 条，当前第 ${data.page} 页`;
+    document.getElementById('ep-page').textContent = `第 ${data.page} 页 / 共 ${Math.max(1, Math.ceil(data.total / data.size))} 页`;
+    renderEpisodes(data.items);
+  } catch (e) { log(`加载 episodes 失败: ${e.message}`, 'err'); }
+}
+
+function renderEpisodes(items) {
+  const tbody = document.getElementById('ep-table');
+  if (items.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#9ca3b0;padding:30px;">暂无数据 — 点击「仅挖掘+门控」或「运行完整流水线」开始</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = items.map((e, i) => {
+    const score = e.score || 0;
+    const statusTag = `<span class="tag ${e.status}">${e.status}</span>`;
+    const gate = e.gate ? `<span class="tag ${e.gate.decision==='reject'?'rejected':'gated'}">${e.gate.decision}</span>` : '<span style="color:#9ca3b0">—</span>';
+    const verif = e.verification === true ? '<span style="color:#059669">✓</span>' : (e.verification === false ? '<span style="color:#b91c1c">✗</span>' : '<span style="color:#9ca3b0">—</span>');
+    return `<tr>
+      <td>${(page-1)*30 + i + 1}</td>
+      <td style="max-width:340px;"><b>${esc(e.title || '(untitled)')}</b><br/><span style="font-size:11px;color:#9ca3b0;">${esc(e.source)} / ${esc(e.project)}</span></td>
+      <td>${esc(e.tool || e.source)}</td>
+      <td><span class="score-bar"><i style="width:${Math.round(score*100)}%"></i></span>${score.toFixed(2)}</td>
+      <td>${statusTag}</td>
+      <td>${gate}${e.gate?.needsReview ? ' <span style="color:#b45309">(复核)</span>' : ''}</td>
+      <td>${verif}</td>
+      <td>
+        <button class="btn small" onclick="viewEpisode('${e.id}')">查看</button>
+        <button class="btn small" onclick="openGate('${e.id}')">门控</button>
+        <button class="btn small" onclick="openAnnotate('${e.id}')">标注</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Tasks ──
+async function loadTasks() {
+  try {
+    const data = await api(`/api/t2e/tasks?page=1&size=100`);
+    renderTasks(data.items);
+  } catch (e) { log(`加载 tasks 失败: ${e.message}`, 'err'); }
+}
+
+function renderTasks(items) {
+  const tbody = document.getElementById('task-table');
+  if (items.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#9ca3b0;padding:30px;">暂无任务 — 运行流水线或对 episode 执行构建</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = items.map((t) => {
+    const em = t.evalMeta || {};
+    return `<tr>
+      <td style="font-size:11px;">${esc(t.id)}</td>
+      <td style="max-width:260px;">${esc(t.title || '')}</td>
+      <td>${t.replaySteps}</td>
+      <td>${t.rewardCandidates}</td>
+      <td>${t.preference ? '✓' : '—'}</td>
+      <td>${t.rlEnv ? '✓' : '—'}</td>
+      <td style="font-size:11px;">${esc(em.domain||'')} / ${esc(em.taskType||'')} / <b>${esc(em.difficulty||'')}</b></td>
+      <td>
+        <button class="btn small" onclick="buildTask('${t.id}')">构建</button>
+        <button class="btn small" onclick="verifyTaskAction('${t.id}')">验证</button>
+        <button class="btn small" onclick="calibrateTask('${t.id}')">校准</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function buildTask(id) {
+  try { const r = await api(`/api/t2e/tasks/${id}/build`, { method: 'POST', body: '{}' }); log(`构建完成 ${r.task.id}`, 'ok'); await loadTasks(); }
+  catch (e) { log(`构建失败: ${e.message}`, 'err'); }
+}
+async function verifyTaskAction(id) {
+  try { const r = await api(`/api/t2e/tasks/${id}/verify`, { method: 'POST', body: '{}' }); log(`验证 ${r.verification.passed ? '通过 ✓' : '失败 ✗'} (${r.verification.checks.length} 项检查)`, r.verification.passed ? 'ok' : 'err'); await loadTasks(); }
+  catch (e) { log(`验证失败: ${e.message}`, 'err'); }
+}
+async function calibrateTask(id) {
+  try { const r = await api(`/api/t2e/tasks/${id}/calibrate`, { method: 'POST', body: '{}' }); log(`校准: difficulty=${r.calibration.difficulty} confidence=${r.calibration.confidence.toFixed(2)}`, 'ok'); await loadTasks(); }
+  catch (e) { log(`校准失败: ${e.message}`, 'err'); }
+}
+
+// ── 导出 ──
+async function doExport() {
+  const split = document.getElementById('export-split').value;
+  try {
+    const r = await api('/api/t2e/export', { method: 'POST', body: JSON.stringify({ split }) });
+    log(`导出完成: ${JSON.stringify(r.counts)} → ${r.outDir}`, 'ok');
+    await loadDatasets();
+  } catch (e) { log(`导出失败: ${e.message}`, 'err'); }
+}
+
+async function loadDatasets() {
+  try {
+    const { exports } = await api('/api/t2e/datasets');
+    const el = document.getElementById('dataset-list');
+    if (exports.length === 0) { el.innerHTML = '<div class="msg info">暂无导出记录</div>'; return; }
+    el.innerHTML = exports.map((x) => {
+      const files = x.manifest?.files || {};
+      const fileList = Object.entries(files).map(([k, v]) =>
+        `<code>${v.file}</code> (${(v.size/1024).toFixed(1)} KB, sha256 <span style="font-size:10px;">${v.sha256.slice(0,12)}…</span>)`
+      ).join('<br/>');
+      return `<div class="card" style="margin-bottom:12px;"><h3>${esc(x.name)}</h3>
+        <div class="kv">split: <b>${x.manifest?.split}</b> · episodes: <b>${x.manifest?.episodeCount}</b> · 生成于 ${x.manifest?.generatedAt}</div>
+        <div style="margin-top:8px;font-size:12px;line-height:1.9;">${fileList}</div></div>`;
+    }).join('');
+  } catch (e) { log(`数据集列表加载失败: ${e.message}`, 'err'); }
+}
+
+// ── 详情 ──
+async function viewEpisode(id) {
+  switchTab('detail');
+  try {
+    const ep = await api(`/api/t2e/episodes/${id}`);
+    currentEpisode = ep;
+    renderDetail(ep);
+  } catch (e) { log(`加载详情失败: ${e.message}`, 'err'); }
+}
+
+function renderDetail(ep) {
+  const el = document.getElementById('detail-content');
+  const ev = ep.evidence || {};
+  const scores = ev.scores || {};
+  const dims = Object.entries(scores).map(([k, v]) => `<span class="tag gated">${k}: ${v.toFixed(2)}</span>`).join(' ');
+  const msgs = (ep.messages || []).map((m) =>
+    `<div style="margin-bottom:6px;"><span class="tag" style="background:#eef0fd;color:#4f46e5;margin-right:6px;">${esc(m.role)}</span><span style="font-size:12px;color:#4b5563;">${esc(m.folded ? '[子代理折叠] ' : '')}${esc(String(m.content||'').slice(0, 500))}${String(m.content||'').length>500 ? '…' : ''}</span></div>`
+  ).join('');
+  const taskSection = ep.task ? `
+    <div class="card" style="grid-column:1/-1;"><h3>任务产物</h3>
+      <div class="kv">
+        指令: <b>${esc((ep.task.instructions||'').slice(0,200))}</b><br/>
+        验收标准 (${(ep.task.acceptanceCriteria||[]).length}): <ul>${(ep.task.acceptanceCriteria||[]).map(c=>`<li>${esc(c)}</li>`).join('')}</ul>
+        回放步骤 (${ep.task.replay?.steps?.length||0}): <ul>${(ep.task.replay?.steps||[]).slice(0,5).map(s=>`<li><code>${esc(s.type)}</code> ${esc(s.payload.slice(0,80))}</li>`).join('')}</ul>
+        偏好: ${ep.task.preference ? `<b>chosen</b> ${esc((ep.task.preference.chosen||'').slice(0,80))}${ep.task.preference.rejected ? ` / <b style="color:#b91c1c">rejected</b> ${esc(ep.task.preference.rejected.slice(0,80))}` : ''}` : '—'}
+        RL 环境: ${ep.task.rlEnv ? '✓ ' + esc(ep.task.rlEnv.state?.description||'') : '—'}
+        奖励候选 (${ep.task.rewardCandidates?.length||0}): ${(ep.task.rewardCandidates||[]).map(r=>`<code>${esc(r.signal)}</code>`).join(', ')}
+      </div>
+    </div>` : '';
+  const verify = ep.verification ? `
+    <div class="card"><h3>审计验证</h3>
+      <div class="kv">结果: <b style="color:${ep.verification.passed?'#059669':'#b91c1c'}">${ep.verification.passed?'PASSED':'FAILED'}</b> · 模式: ${ep.verification.mode} · 分数: ${ep.verification.score.toFixed(2)}</div>
+      <div style="margin-top:8px;">${(ep.verification.checks||[]).map(c=>`<div>${c.ok?'✓':'✗'} <b>${esc(c.label)}</b> <span style="color:#9ca3b0">${esc(JSON.stringify(c.detail||{}))}</span></div>`).join('')}</div>
+    </div>` : '';
+  const cal = ep.calibration ? `
+    <div class="card"><h3>难度校准</h3>
+      <div class="kv">难度: <b>${ep.calibration.difficulty}</b> · 估计: ${ep.calibration.estimate.toFixed(2)} · 置信度: ${ep.calibration.confidence.toFixed(2)}</div>
+      <pre>${esc(JSON.stringify(ep.calibration.signalBreakdown, null, 2))}</pre>
+    </div>` : '';
+  const anns = (ep.annotations||[]).length > 0 ?
+    `<div class="card"><h3>人工标注 (${ep.annotations.length})</h3>${(ep.annotations||[]).map(a=>`<div style="font-size:12px;margin-bottom:6px;"><span class="tag ${a.label==='invalid'?'rejected':'gated'}">${esc(a.label)}</span> <b>${esc(a.by)}</b> @ ${a.at}<br/>${esc(a.content)}</div>`).join('')}</div>` : '';
+  el.innerHTML = `
+    <div class="detail-grid">
+      <div class="card"><h3>${esc(ep.title||'(untitled)')}</h3>
+        <div class="kv">
+          id: <code>${esc(ep.id)}</code><br/>
+          来源: <b>${esc(ep.source)}</b> / ${esc(ep.project)} / 工具: ${esc(ep.tool)}<br/>
+          状态: <span class="tag ${esc(ep.status)}">${esc(ep.status)}</span><br/>
+          创建: ${ep.createdAt}
+        </div>
+        <h3 style="margin-top:14px;">证据排序</h3>
+        <div class="kv">总分: <b style="font-size:16px;color:#4f46e5;">${(ev.score||0).toFixed(2)}</b></div>
+        <div style="margin-top:6px;">${dims || '—'}</div>
+        <div style="margin-top:8px;font-size:12px;color:#6b7280;">${(ev.reasons||[]).map(r=>`• ${esc(r)}`).join('<br/>')}</div>
+        <h3 style="margin-top:14px;">Prompt</h3>
+        <pre>${esc(ep.prompt||'')}</pre>
+        <h3 style="margin-top:14px;">Ground Truth</h3>
+        <pre>${esc(ep.groundTruth||'')}</pre>
+      </div>
+      <div class="card"><h3>消息序列 (${(ep.messages||[]).length})</h3>${msgs || '<span style="color:#9ca3b0">空</span>'}</div>
+      ${taskSection}${verify}${cal}${anns}
+      <div class="card" style="grid-column:1/-1;"><h3>溯源链 (Provenance)</h3>
+        <div style="font-size:12px;line-height:1.9;">${(ep.provenance||[]).map(p=>`<div><span class="tag mined">${esc(p.stage)}</span> ${esc(p.detail)} <span style="color:#9ca3b0">@ ${p.at}</span></div>`).join('')}</div>
+      </div>
+    </div>`;
+}
+
+// ── 门控 / 标注 Modal ──
+function openGate(id) {
+  document.getElementById('gate-episode').value = id;
+  openModal('gate-modal');
+}
+async function submitGate() {
+  const id = document.getElementById('gate-episode').value;
+  const decision = document.getElementById('gate-decision').value;
+  const note = document.getElementById('gate-note').value;
+  try {
+    const r = await api(`/api/t2e/episodes/${id}/gate`, { method: 'POST', body: JSON.stringify({ decision, note }) });
+    log(`门控 ${id} → ${r.status} (${decision})`, 'ok');
+    closeModal('gate-modal');
+    await refreshStatus(); await loadEpisodes(page);
+  } catch (e) { log(`门控失败: ${e.message}`, 'err'); }
+}
+
+async function openAnnotate(id) {
+  document.getElementById('ann-episode').value = id;
+  // 重置为默认值
+  document.getElementById('ann-label').value = 'comment';
+  document.getElementById('ann-content').value = '';
+  document.getElementById('ann-prompt').value = '';
+  document.getElementById('ann-truth').value = '';
+
+  // 加载 episode 数据回填表单
+  try {
+    const ep = await api(`/api/t2e/episodes/${id}`);
+    currentEpisode = ep;
+    const lastAnn = (ep.annotations || []).length > 0 ? ep.annotations[ep.annotations.length - 1] : null;
+    if (lastAnn) {
+      document.getElementById('ann-label').value = lastAnn.label || 'comment';
+      document.getElementById('ann-content').value = lastAnn.content || '';
+    }
+    if (ep.task) {
+      document.getElementById('ann-prompt').value = ep.task.instructions || '';
+    }
+    if (ep.groundTruth) {
+      document.getElementById('ann-truth').value = ep.groundTruth;
+    }
+  } catch (e) {
+    log(`加载 episode 回填失败: ${e.message}`, 'warn');
+  }
+
+  openModal('annotate-modal');
+}
+async function submitAnnotation() {
+  const id = document.getElementById('ann-episode').value;
+  const label = document.getElementById('ann-label').value;
+  const content = document.getElementById('ann-content').value;
+  const prompt = document.getElementById('ann-prompt').value;
+  const truth = document.getElementById('ann-truth').value;
+  const modify = {};
+  if (prompt) modify.prompt = prompt;
+  if (truth) modify.groundTruth = truth;
+  try {
+    const r = await api(`/api/t2e/episodes/${id}/annotate`, { method: 'POST', body: JSON.stringify({ label, content, modify }) });
+    log(`标注已提交 (${label}): ${content.slice(0, 50)}`, 'ok');
+    closeModal('annotate-modal');
+    if (currentEpisode && currentEpisode.id === id) viewEpisode(id);
+    await loadEpisodes(page);
+  } catch (e) { log(`标注失败: ${e.message}`, 'err'); }
+}
+
+// ── 通用 ──
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.panel === name));
+  document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.id === `panel-${name}`));
+  if (name === 'tasks') loadTasks();
+  if (name === 'datasets') loadDatasets();
+}
+function openModal(id) { closeModal('annotate-modal'); closeModal('gate-modal'); document.getElementById(id).classList.remove('hidden'); }
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Init ──
+refreshStatus();
+loadEpisodes(1);
+loadTasks();
+loadDatasets();
+</script>
+</body>
+</html>
