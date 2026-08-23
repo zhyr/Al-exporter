@@ -140,6 +140,8 @@ AI-exporter/
 | GET | `/api/stats` | 统计数据 |
 
 ### Transfer2Eval（会话轨迹 → 评估数据集）
+![Overview](Transfer2Eval.png)
+![Detail](Transfer2Eval2.png)
 
 将 17+ 工具的会话轨迹编译为**可回放任务 / 偏好数据 / RL 环境 / 执行奖励候选**，输出可直接用于评估与训练的数据集：
 
