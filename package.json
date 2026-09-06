@@ -9,15 +9,22 @@
     "aex": "src/cli.js"
   },
   "scripts": {
-    "start":    "node src/cli.js export",
-    "serve":    "node src/cli.js serve",
-    "scan":     "node src/cli.js scan",
-    "export":   "node src/cli.js export",
-    "test":     "node --test tests/**/*.test.js",
+    "start": "node src/cli.js export",
+    "serve": "node src/cli.js serve",
+    "scan": "node src/cli.js scan",
+    "export": "node src/cli.js export",
+    "test": "node --test tests/**/*.test.js",
     "test:cov": "c8 node --test tests/**/*.test.js"
   },
   "keywords": [
-    "ai", "cursor", "claude", "codex", "backup", "exporter", "llm", "training-data"
+    "ai",
+    "cursor",
+    "claude",
+    "codex",
+    "backup",
+    "exporter",
+    "llm",
+    "training-data"
   ],
   "author": "",
   "license": "MIT",
@@ -30,11 +37,12 @@
     ".aexignore"
   ],
   "dependencies": {
-    "ajv":            "^8.17.1",
+    "ajv": "^8.17.1",
     "better-sqlite3": "^12.8.0",
-    "fs-extra":       "^11.3.4",
-    "glob":           "^13.0.6",
-    "p-limit":        "^6.2.0"
+    "fast-uri": "^3.1.7",
+    "fs-extra": "^11.3.4",
+    "glob": "^13.0.6",
+    "p-limit": "^6.2.0"
   },
   "devDependencies": {
     "c8": "^10.1.3"
