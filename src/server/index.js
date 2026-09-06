@@ -125,8 +125,12 @@ async function route(req, res) {
 
 async function handleScan(req, res) {
   const body = await readBody(req);
-  const workspace = body.workspace || os.homedir();
   const dataDir = body.dataDir || OUTPUT_DIR;
+  // 解析自定义扫描目录（绝对路径，每行/逗号分隔或数组）；workspace 同时作为候选自定义目录传入
+  const rawDirs = body.extraDirs || body.workspace || [];
+  const extraDirs = (Array.isArray(rawDirs) ? rawDirs : String(rawDirs).split(/[\n,]/))
+    .map((d) => String(d || "").trim())
+    .filter(Boolean);
   const jobId = createJob("scan");
   respond(res, 202, { job_id: jobId });
 
@@ -141,6 +145,7 @@ async function handleScan(req, res) {
       const { scanAllToolsIncremental } = await import("../../core/scan.js");
       
       const files = await scanAllToolsIncremental({
+        extraDirs,
         onProgress: (phase, depth, done, total, msg) => {
           // 阶段进度: 0-25% 第一阶段, 25-50% 第二阶段, etc.
           const baseProgress = (phase - 1) * 25;

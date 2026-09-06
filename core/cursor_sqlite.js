@@ -48,6 +48,10 @@ export function inferSourceFromVscdbPath(dbPath) {
   if (p.includes("/antigravity/")) return "antigravity";
   if (p.includes("/windsurf/")) return "windsurf";
   if (p.includes("/vscodium/")) return "vscode_copilot";
+  // Trae family: Trae Work CN / Trae Work / Trae CN / Trae (intl) — all map to "trae"
+  if (p.includes("/trae work cn/")) return "trae";
+  if (p.includes("/trae work/")) return "trae";
+  if (p.includes("/trae cn/")) return "trae";
   if (p.includes("/trae/")) return "trae";
   if (p.includes("/codebuddy/")) return "codebuddy";
   if (p.includes("/qoder/")) return "qoder";
@@ -72,10 +76,13 @@ export function getVscdbWorkspaceRootCandidates() {
     "Library/Application Support/Windsurf/User/workspaceStorage",
     "Library/Application Support/VSCodium/User/workspaceStorage",
     "Library/Application Support/Antigravity/User/workspaceStorage",
-    "Library/Application Support/Trae CN/User/workspaceStorage",   // Trae
-    "Library/Application Support/CodeBuddy/User/workspaceStorage",  // CodeBuddy
+    "Library/Application Support/Trae/User/workspaceStorage",         // Trae (intl)
+    "Library/Application Support/Trae CN/User/workspaceStorage",      // Trae CN
+    "Library/Application Support/Trae Work/User/workspaceStorage",    // Trae Work
+    "Library/Application Support/Trae Work CN/User/workspaceStorage", // Trae Work CN
+    "Library/Application Support/CodeBuddy/User/workspaceStorage",    // CodeBuddy
     "Library/Application Support/CodeBuddy CN/User/workspaceStorage",
-    "Library/Application Support/Qoder/User/workspaceStorage",      // Qoder
+    "Library/Application Support/Qoder/User/workspaceStorage",        // Qoder
   ];
   const xdgRel = [
     ".config/Cursor/User/workspaceStorage",
@@ -85,6 +92,8 @@ export function getVscdbWorkspaceRootCandidates() {
     ".config/VSCodium/User/workspaceStorage",
     ".config/Antigravity/User/workspaceStorage",
     ".config/Trae/User/workspaceStorage",
+    ".config/Trae Work/User/workspaceStorage",
+    ".config/Trae Work CN/User/workspaceStorage",
     ".config/CodeBuddy/User/workspaceStorage",
     ".config/Qoder/User/workspaceStorage",
   ];

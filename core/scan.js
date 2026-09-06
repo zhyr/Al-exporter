@@ -66,12 +66,25 @@ const PATH_PATTERNS = [
   "Library/Application Support/CodeBuddy CN/User/workspaceStorage",
   "Library/Application Support/CodeBuddy CN/User/globalStorage",
 
-  // Trae
+  // Trae family: Trae (intl) / Trae CN / Trae Work / Trae Work CN
   ".trae",
+  ".trae-work",
   ".config/trae",
+  ".config/Trae/User/workspaceStorage",
+  ".config/Trae Work/User/workspaceStorage",
+  ".config/Trae Work CN/User/workspaceStorage",
+  "Library/Application Support/Trae/User/History",
+  "Library/Application Support/Trae/User/workspaceStorage",
+  "Library/Application Support/Trae/User/globalStorage",
   "Library/Application Support/Trae CN/User/History",
   "Library/Application Support/Trae CN/User/workspaceStorage",
   "Library/Application Support/Trae CN/User/globalStorage",
+  "Library/Application Support/Trae Work/User/History",
+  "Library/Application Support/Trae Work/User/workspaceStorage",
+  "Library/Application Support/Trae Work/User/globalStorage",
+  "Library/Application Support/Trae Work CN/User/History",
+  "Library/Application Support/Trae Work CN/User/workspaceStorage",
+  "Library/Application Support/Trae Work CN/User/globalStorage",
 
   // Augment
   ".augment",
@@ -202,7 +215,7 @@ const GLOB_IGNORE = [
 const DEEP_SCAN_PATTERNS = [
   ".cursor", ".claude", ".antigravity", ".gemini", ".augment",
   ".kiro", ".codex", ".opencode", ".qoder", ".codebuddy",
-  ".trae", ".windsurf", ".iflow", ".continue", ".deepseek",
+  ".trae", ".trae-work", ".windsurf", ".iflow", ".continue", ".deepseek",
   ".tongyi", ".devin", ".replit"
 ];
 
@@ -325,6 +338,7 @@ export async function scanAllToolsIncremental({
   workers = 8,
   maxFileSizeBytes = 10 * 1024 * 1024,
   extraPatterns = [],
+  extraDirs = [],
   onProgress = null,
   onChunk = null,
 } = {}) {
@@ -381,7 +395,61 @@ export async function scanAllToolsIncremental({
     if (onProgress) onProgress(phase, depth, allResults.length, allPathsAtDepth.length, "Phase complete");
   }
 
+  // ── User-provided extra directories (absolute paths, e.g. non-default agent dirs) ──
+  if (extraDirs && extraDirs.length > 0) {
+    if (onProgress) onProgress(4, 10, 0, 0, "Scanning custom directories...");
+    const customPaths = await scanExtraDirs(extraDirs, seenPaths);
+    if (customPaths.length > 0) {
+      const results = await processFiles(customPaths, {
+        workers,
+        maxFileSizeBytes,
+        onProgress: (done, total, p) => {
+          if (onProgress) onProgress(4, 10, done, total, `Scanning ${path.basename(p)}`);
+        },
+      });
+      allResults.push(...results);
+      if (onChunk && results.length > 0) {
+        onChunk(results, { phase: 5, depth: 0, totalFound: allResults.length });
+      }
+    }
+  }
+
   return allResults;
+}
+
+/**
+ * Glob all interesting files under user-specified absolute directories.
+ * Used when sessions live outside the well-known HOME paths (custom CODEX_HOME,
+ * Trae Work on non-default location, portable installs, etc.).
+ */
+async function scanExtraDirs(extraDirs, seenPaths) {
+  const found = [];
+  for (const raw of extraDirs) {
+    const dir = String(raw || "").trim();
+    if (!dir) continue;
+    // Expand ~ to home dir
+    const abs = dir.startsWith("~") ? path.join(HOME, dir.slice(1)) : dir;
+    try {
+      const st = await fs.stat(abs);
+      if (!st.isDirectory()) continue;
+    } catch {
+      continue; // dir missing/unreadable — skip silently
+    }
+    const files = await glob(GLOB_EXTENSIONS, {
+      cwd: abs,
+      absolute: true,
+      nodir: true,
+      maxDepth: 8,
+      ignore: GLOB_IGNORE,
+    }).catch(() => []);
+    for (const f of files) {
+      if (!seenPaths.has(f)) {
+        seenPaths.add(f);
+        found.push(f);
+      }
+    }
+  }
+  return found;
 }
 
 /**

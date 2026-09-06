@@ -18,7 +18,7 @@ const THREAD_SCHEMA = {
     thread_id:      { type: "string", minLength: 1 },
     type: {
       type: "string",
-      enum: ["thread", "plan", "task", "walkthrough", "artifact", "mcp", "rule", "config"],
+      enum: ["thread", "agent", "plan", "task", "walkthrough", "artifact", "mcp", "rule", "config"],
     },
     messages: {
       type: "array",

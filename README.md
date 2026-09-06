@@ -43,7 +43,7 @@ AI Exporter 是一款强大的 AI 编码工具对话数据扫描、备份、导�
 | Kiro | `.kiro/` | ✅ |
 | iFlow | `.iflow/` | ✅ |
 | Qoder | `.qoder/` | ✅ |
-| Trae | `.trae/` | ✅ |
+| Trae（含 Trae CN / Trae Work / Trae Work CN） | `.trae/`、`Trae*` 系列数据目录 | ✅ |
 | Augment | `.augment/` | ✅ |
 | Zed | `.zed/` | ✅ |
 | Aider | `.aider/` | ✅ |
@@ -204,6 +204,17 @@ node src/cli.js t2e export --format all --split candidate_generated
 | POST | `/api/t2e/export` | 导出数据集（eval/cms_sft/cms_dpo/all） |
 | GET | `/api/t2e/datasets` | 已导出数据集清单 |
 
+### 常见问题（FAQ）
+
+**Q：扫描不到我的会话（数据不在默认目录）？**
+默认只扫描 HOME 下的已知目录。若工具使用了自定义数据目录（如 `CODEX_HOME`、便携版安装），打开 Web 界面的「设置 → 额外扫描目录」，把会话目录逐行填入后重新「增量扫描」。该目录支持 `~` 展开，可指向任意绝对路径。
+
+**Q：Trae / Trae CN / Trae Work / Trae Work CN 都支持吗？**
+支持。扫描默认覆盖 `.trae/`、`Library/Application Support/Trae*`、`.config/Trae*` 等全部变体目录。若你的 Trae 安装在非默认位置，同样通过「额外扫描目录」加入。
+
+**Q：扫描完成但没有数据载入？**
+依次排查：① 确认目标工具确实产生过会话记录；② 会话是否在「额外扫描目录」之外的位置；③ 查看扫描日志中「Found N candidate files」是否非零；④ 若文件格式不支持，可先通过「导入」添加。
+
 ### 更新日志
 
 #### v2.1.0
@@ -260,7 +271,7 @@ One-click tool to scan, backup, and export AI coding assistant conversations. Su
 | Kiro | `.kiro/` | ✅ |
 | iFlow | `.iflow/` | ✅ |
 | Qoder | `.qoder/` | ✅ |
-| Trae | `.trae/` | ✅ |
+| Trae (incl. Trae CN / Trae Work / Trae Work CN) | `.trae/`, `Trae*` data dirs | ✅ |
 | Augment | `.augment/` | ✅ |
 | Zed | `.zed/` | ✅ |
 | Aider | `.aider/` | ✅ |
@@ -415,6 +426,17 @@ node src/cli.js t2e export --format all --split candidate_generated
 | POST | `/api/t2e/tasks/:id/calibrate` | Difficulty calibration |
 | POST | `/api/t2e/export` | Export datasets (eval/cms_sft/cms_dpo/all) |
 | GET | `/api/t2e/datasets` | List exported datasets |
+
+### FAQ
+
+**Q: My sessions are not found (data is not in a default location)?**
+Only well-known directories under HOME are scanned by default. If a tool uses a custom data dir (e.g. `CODEX_HOME`, portable installs), open **Settings → Extra scan directories** in the web UI and list the session directory line by line, then run an incremental scan again. `~` expansion and any absolute path are supported.
+
+**Q: Is Trae / Trae CN / Trae Work / Trae Work CN supported?**
+Yes. Scanning covers all variants: `.trae/`, `Library/Application Support/Trae*`, `.config/Trae*`, etc. If your Trae lives elsewhere, add it via **Extra scan directories**.
+
+**Q: Scan completes but no data is loaded?**
+Check in order: ① make sure the tool actually produced sessions; ② whether sessions live outside any scanned directory; ③ whether the scan log shows a non-zero "Found N candidate files"; ④ if the file format is unsupported, try **Import** instead.
 
 ### Changelog
 

@@ -736,7 +736,8 @@ async function triggerScan(isManualRefresh = false) {
   }
 
   try {
-    const scanBody = JSON.stringify({ dataDir: settings.dataDir });
+    const extraDirs = (settings.extraDirs || '').split('\n').map(s => s.trim()).filter(Boolean);
+    const scanBody = JSON.stringify({ dataDir: settings.dataDir, extraDirs });
     const res = await fetch(`${API_BASE}/api/scan`, { method: 'POST', body: scanBody, headers: { 'Content-Type': 'application/json' } });
     const { job_id } = await res.json();
     
@@ -1835,7 +1836,8 @@ function exportAll() {
 
 // ── Settings ───────────────────────────────────────────────────────────────────
 let settings = {
-  dataDir: ''  // 初始为空，从服务器加载
+  dataDir: '',      // 初始为空，从服务器加载
+  extraDirs: ''     // 额外扫描目录（每行一个），存 localStorage
 };
 
 function getDefaultDataDir() {
@@ -1857,6 +1859,11 @@ async function loadSettings() {
   } catch (e) {
     settings.dataDir = getDefaultDataDir();
     console.warn('loadSettings failed', e);
+  }
+  try {
+    settings.extraDirs = localStorage.getItem('ai-exporter-extra-dirs') || '';
+  } catch (e) {
+    settings.extraDirs = '';
   }
 }
 
@@ -1884,6 +1891,7 @@ function selectFolder() {
 
 function openSettings() {
   document.getElementById('settings-data-dir').value = settings.dataDir;
+  document.getElementById('settings-extra-dirs').value = settings.extraDirs;
   document.getElementById('settings-modal').classList.add('open');
 }
 
@@ -1906,6 +1914,10 @@ async function saveSettings() {
       alert('保存失败: ' + e.message);
     }
   }
+  settings.extraDirs = document.getElementById('settings-extra-dirs').value || '';
+  try {
+    localStorage.setItem('ai-exporter-extra-dirs', settings.extraDirs);
+  } catch (e) { /* localStorage 不可用时忽略 */ }
   closeSettings();
 }
 
@@ -2110,6 +2122,11 @@ async function syncToAgent() {
         <input id="settings-data-dir" type="text" placeholder="./agent-backup" style="flex:1;" />
         <button onclick="selectFolder()" style="padding: 8px 12px; border: 1px solid #dde0ea; border-radius: 8px; background: #f3f4f6; cursor: pointer;">📁 选择</button>
       </div>
+    </div>
+    <div class="modal-row">
+      <label>额外扫描目录（每行一个）</label>
+      <textarea id="settings-extra-dirs" rows="3" placeholder="/Users/me/.codex/rollouts&#10;/Users/me/Library/Application Support/Trae Work/User" style="width:100%;padding:10px;border:1px solid #dde0ea;border-radius:8px;font-size:13px;font-family:monospace;resize:vertical;"></textarea>
+      <div style="font-size:12px;color:#6b7280;margin-top:6px;">当 Codex / Trae 等会话不在默认位置（如自定义 CODEX_HOME、Trae Work）时，把它们的目录填在这里，增量扫描会一并读取。</div>
     </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeSettings()">取消</button>
