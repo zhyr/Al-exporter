@@ -2,7 +2,7 @@
 
 > 一键扫描、备份、导出 AI 编码工具对话数据，支持 26+ 主流 Agent，数据可转换为 Markdown/JSON/训练格式，赋能 AI 训练与跨工具迁移。
 
-**Version 2.1.1** · MIT License
+**Version 2.2.0** · MIT License
 
 [中文](#中文)  | [English](#english)
 
@@ -40,6 +40,8 @@ AI Exporter 是一款强大的 AI 编码工具对话数据扫描、备份、导�
 | Cline | `.cline/` | ✅ |
 | Windsurf | `.windsurf/` | ✅ |
 | CodeBuddy | `.codebuddy/` | ✅ |
+| WorkBuddy（腾讯） | `.workbuddy/`、`Application Support/WorkBuddy*` | ✅ |
+| ZCode（智谱 Z.ai） | `.zcode/`、`Application Support/ZCode*` | ✅ |
 | Kiro | `.kiro/` | ✅ |
 | iFlow | `.iflow/` | ✅ |
 | Qoder | `.qoder/` | ✅ |
@@ -212,10 +214,17 @@ node src/cli.js t2e export --format all --split candidate_generated
 **Q：Trae / Trae CN / Trae Work / Trae Work CN 都支持吗？**
 支持。扫描默认覆盖 `.trae/`、`Library/Application Support/Trae*`、`.config/Trae*` 等全部变体目录。若你的 Trae 安装在非默认位置，同样通过「额外扫描目录」加入。
 
+**Q：WorkBuddy / ZCode 等新工具支持吗？**
+支持。WorkBuddy（腾讯）与 ZCode（智谱 Z.ai）已内置默认数据目录扫描与来源识别；与 Cursor 等 VSCode 系工具相同，会话会经 `*.vscdb` 通道自动提取。若安装在非默认数据目录，用「设置 → 额外扫描目录」指向即可，无需改代码。
+
 **Q：扫描完成但没有数据载入？**
 依次排查：① 确认目标工具确实产生过会话记录；② 会话是否在「额外扫描目录」之外的位置；③ 查看扫描日志中「Found N candidate files」是否非零；④ 若文件格式不支持，可先通过「导入」添加。
 
 ### 更新日志
+
+#### v2.2.0
+
+- 新增 **WorkBuddy**（腾讯）与 **ZCode**（智谱 Z.ai）支持：内置默认数据目录扫描、来源识别与 `*.vscdb` 会话提取；`detectTool`、source 枚举、schema 校验与 T2E 域映射同步扩展。
 
 #### v2.1.1
 
@@ -275,6 +284,8 @@ One-click tool to scan, backup, and export AI coding assistant conversations. Su
 | Cline | `.cline/` | ✅ |
 | Windsurf | `.windsurf/` | ✅ |
 | CodeBuddy | `.codebuddy/` | ✅ |
+| WorkBuddy (Tencent) | `.workbuddy/`, `Application Support/WorkBuddy*` | ✅ |
+| ZCode (Zhipu Z.ai) | `.zcode/`, `Application Support/ZCode*` | ✅ |
 | Kiro | `.kiro/` | ✅ |
 | iFlow | `.iflow/` | ✅ |
 | Qoder | `.qoder/` | ✅ |
@@ -442,10 +453,17 @@ Only well-known directories under HOME are scanned by default. If a tool uses a 
 **Q: Is Trae / Trae CN / Trae Work / Trae Work CN supported?**
 Yes. Scanning covers all variants: `.trae/`, `Library/Application Support/Trae*`, `.config/Trae*`, etc. If your Trae lives elsewhere, add it via **Extra scan directories**.
 
+**Q: Are newer tools like WorkBuddy / ZCode supported?**
+Yes. WorkBuddy (Tencent) and ZCode (Zhipu Z.ai) ship with built-in default data-dir scanning and source detection; like Cursor and other VS Code-family tools, their sessions are extracted through the `*.vscdb` channel. If they are installed in a non-default data dir, point **Settings → Extra scan directories** at it — no code changes needed.
+
 **Q: Scan completes but no data is loaded?**
 Check in order: ① make sure the tool actually produced sessions; ② whether sessions live outside any scanned directory; ③ whether the scan log shows a non-zero "Found N candidate files"; ④ if the file format is unsupported, try **Import** instead.
 
 ### Changelog
+
+#### v2.2.0
+
+- New **WorkBuddy** (Tencent) and **ZCode** (Zhipu Z.ai) support: built-in default data-dir scanning, source detection and `*.vscdb` conversation extraction; `detectTool`, source enum, schema validation and T2E domain maps extended accordingly.
 
 #### v2.1.1
 

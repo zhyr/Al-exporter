@@ -91,6 +91,7 @@ export const TOOL_DOMAIN_MAP = Object.freeze({
   iflow: 'tool',
   codebuddy: 'reasoning',
   workbuddy: 'tool',
+  zcode: 'tool',
   kiro: 'tool',
   zed: 'tool',
   copilot: 'tool',

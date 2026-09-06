@@ -11,6 +11,7 @@ export const ALLOWED_SOURCES = new Set([
   "vscode_copilot", "imported", "api_capture", "unknown", "other",
   // Common local tooling IDs seen in paths / exports (kept explicit for UI + stats)
   "cline", "zed", "kiro",
+  "workbuddy", "zcode",
 ]);
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -48,6 +49,8 @@ export function normalizeMetaSource(rawSource) {
     zed: "zed",
     cline: "cline",
     "roo-cline": "cline",
+    workbuddy: "workbuddy",
+    zcode: "zcode",
   };
   const resolved = ALIASES[s] ?? s;
   return ALLOWED_SOURCES.has(resolved) ? resolved : "other";

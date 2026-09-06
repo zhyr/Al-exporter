@@ -22,6 +22,8 @@ describe("normalizeMetaSource", () => {
   it("maps 'openai' → codex",       () => assert.equal(normalizeMetaSource("openai"), "codex"));
   it("maps 'qcoder' → qoder",       () => assert.equal(normalizeMetaSource("qcoder"), "qoder"));
   it("maps 'zed' → zed",          () => assert.equal(normalizeMetaSource("zed"), "zed"));
+  it("maps 'workbuddy' → workbuddy", () => assert.equal(normalizeMetaSource("workbuddy"), "workbuddy"));
+  it("maps 'zcode' → zcode",      () => assert.equal(normalizeMetaSource("zcode"), "zcode"));
   it("unknown gibberish → other",   () => assert.equal(normalizeMetaSource("my-custom-tool-123"), "other"));
 });
 

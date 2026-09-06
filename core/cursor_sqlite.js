@@ -45,6 +45,11 @@ const LIKE_PATTERNS = [
  */
 export function inferSourceFromVscdbPath(dbPath) {
   const p = dbPath.replace(/\\/g, "/").toLowerCase();
+  // WorkBuddy family (before generic Code/CodeBuddy rules)
+  if (p.includes("/workbuddy cn/")) return "workbuddy";
+  if (p.includes("/workbuddy/")) return "workbuddy";
+  // ZCode (Zhipu Z.ai) — must precede generic /code/ rule
+  if (p.includes("/zcode/")) return "zcode";
   if (p.includes("/antigravity/")) return "antigravity";
   if (p.includes("/windsurf/")) return "windsurf";
   if (p.includes("/vscodium/")) return "vscode_copilot";
@@ -82,6 +87,9 @@ export function getVscdbWorkspaceRootCandidates() {
     "Library/Application Support/Trae Work CN/User/workspaceStorage", // Trae Work CN
     "Library/Application Support/CodeBuddy/User/workspaceStorage",    // CodeBuddy
     "Library/Application Support/CodeBuddy CN/User/workspaceStorage",
+    "Library/Application Support/WorkBuddy/User/workspaceStorage",    // WorkBuddy
+    "Library/Application Support/WorkBuddy CN/User/workspaceStorage",
+    "Library/Application Support/ZCode/User/workspaceStorage",        // ZCode
     "Library/Application Support/Qoder/User/workspaceStorage",        // Qoder
   ];
   const xdgRel = [
@@ -95,6 +103,8 @@ export function getVscdbWorkspaceRootCandidates() {
     ".config/Trae Work/User/workspaceStorage",
     ".config/Trae Work CN/User/workspaceStorage",
     ".config/CodeBuddy/User/workspaceStorage",
+    ".config/WorkBuddy/User/workspaceStorage",
+    ".config/ZCode/User/workspaceStorage",
     ".config/Qoder/User/workspaceStorage",
   ];
   const out = [];

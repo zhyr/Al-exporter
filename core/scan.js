@@ -66,6 +66,23 @@ const PATH_PATTERNS = [
   "Library/Application Support/CodeBuddy CN/User/workspaceStorage",
   "Library/Application Support/CodeBuddy CN/User/globalStorage",
 
+  // WorkBuddy (Tencent work line / workbuddy.ai)
+  ".workbuddy",
+  ".config/workbuddy",
+  "Library/Application Support/WorkBuddy/User/History",
+  "Library/Application Support/WorkBuddy/User/workspaceStorage",
+  "Library/Application Support/WorkBuddy/User/globalStorage",
+  "Library/Application Support/WorkBuddy CN/User/History",
+  "Library/Application Support/WorkBuddy CN/User/workspaceStorage",
+  "Library/Application Support/WorkBuddy CN/User/globalStorage",
+
+  // ZCode (Zhipu Z.ai Agent IDE)
+  ".zcode",
+  ".config/zcode",
+  "Library/Application Support/ZCode/User/History",
+  "Library/Application Support/ZCode/User/workspaceStorage",
+  "Library/Application Support/ZCode/User/globalStorage",
+
   // Trae family: Trae (intl) / Trae CN / Trae Work / Trae Work CN
   ".trae",
   ".trae-work",
@@ -214,8 +231,8 @@ const GLOB_IGNORE = [
 // 需要深度扫描的目录
 const DEEP_SCAN_PATTERNS = [
   ".cursor", ".claude", ".antigravity", ".gemini", ".augment",
-  ".kiro", ".codex", ".opencode", ".qoder", ".codebuddy",
-  ".trae", ".trae-work", ".windsurf", ".iflow", ".continue", ".deepseek",
+  ".kiro", ".codex", ".opencode", ".qoder", ".codebuddy", ".workbuddy",
+  ".trae", ".trae-work", ".zcode", ".windsurf", ".iflow", ".continue", ".deepseek",
   ".tongyi", ".devin", ".replit"
 ];
 

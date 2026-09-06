@@ -788,11 +788,17 @@ async function handleThread(req, res, threadId) {
 function transformToNormalized(raw, filePath) {
   const path = filePath;
   const filename = path.split('/').pop().replace('.json', '');
-  const source = path.includes('/.cursor/') ? 'cursor' :
-                 path.includes('/.claude/') ? 'claude_code' :
-                 path.includes('/CodeBuddy') ? 'codebuddy' :
-                 path.includes('/Antigravity') ? 'antigravity' :
-                 path.includes('/Codex') ? 'codex' : 'unknown';
+  const lower = path.toLowerCase();
+  const source = lower.includes('/.cursor/') ? 'cursor' :
+                 lower.includes('/.claude/') ? 'claude_code' :
+                 lower.includes('workbuddy') ? 'workbuddy' :
+                 lower.includes('codebuddy') ? 'codebuddy' :
+                 lower.includes('zcode') ? 'zcode' :
+                 lower.includes('trae') ? 'trae' :
+                 lower.includes('qoder') ? 'qoder' :
+                 lower.includes('windsurf') ? 'windsurf' :
+                 lower.includes('antigravity') ? 'antigravity' :
+                 lower.includes('codex') || lower.includes('opencode') ? 'codex' : 'unknown';
 
   // Determine type from path
   let type = 'thread';

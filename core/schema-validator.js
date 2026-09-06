@@ -67,7 +67,7 @@ const THREAD_SCHEMA = {
           type: "string",
           enum: [
             "cursor", "antigravity", "codex", "augment", "claude_code",
-            "iflow", "trae", "codebuddy", "qoder", "windsurf",
+            "iflow", "trae", "codebuddy", "workbuddy", "zcode", "qoder", "windsurf",
             "vscode_copilot", "imported", "api_capture", "unknown", "other",
           ],
         },

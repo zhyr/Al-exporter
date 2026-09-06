@@ -14,6 +14,8 @@ describe("detectTool", () => {
   it("maps qoder paths", () => assert.equal(detectTool("/home/user/.qcoder/chat.jsonl"), "qoder"));
   it("maps windsurf paths", () => assert.equal(detectTool("/home/user/.windsurf/conv.json"), "windsurf"));
   it("maps augment paths", () => assert.equal(detectTool("/home/user/.augment/history.json"), "augment"));
+  it("maps workbuddy paths", () => assert.equal(detectTool("/Users/u/Library/Application Support/WorkBuddy/User/globalStorage/state.vscdb"), "workbuddy"));
+  it("maps zcode paths", () => assert.equal(detectTool("/Users/u/.zcode/sessions/xyz.jsonl"), "zcode"));
   it("returns unknown for unrecognised paths", () => assert.equal(detectTool("/tmp/random.json"), "unknown"));
   it("cursor beats vscode (Cursor IS vscode-based)", () => assert.equal(detectTool("/User/Library/Application Support/Cursor/User/workspace"), "cursor"));
 });

@@ -98,8 +98,12 @@ const TOOL_RULES = [
   ["iflow", "iflow"],
   // Trae
   ["trae", "trae"],
+  // WorkBuddy (Tencent, CodeBuddy work line) — before CodeBuddy
+  ["workbuddy", "workbuddy"],
   // CodeBuddy
   ["codebuddy", "codebuddy"],
+  // ZCode (Zhipu Z.ai Agent IDE) — before generic VS Code rules
+  ["zcode", "zcode"],
   // Qoder / QCoder
   ["qoder", "qoder"],
   ["qcoder", "qoder"],
