@@ -2,7 +2,7 @@
 
 > 一键扫描、备份、导出 AI 编码工具对话数据，支持 26+ 主流 Agent，数据可转换为 Markdown/JSON/训练格式，赋能 AI 训练与跨工具迁移。
 
-**Version 2.1.0** · MIT License
+**Version 2.1.1** · MIT License
 
 [中文](#中文)  | [English](#english)
 
@@ -216,6 +216,13 @@ node src/cli.js t2e export --format all --split candidate_generated
 依次排查：① 确认目标工具确实产生过会话记录；② 会话是否在「额外扫描目录」之外的位置；③ 查看扫描日志中「Found N candidate files」是否非零；④ 若文件格式不支持，可先通过「导入」添加。
 
 ### 更新日志
+
+#### v2.1.1
+
+- 支持 **Trae 家族全版本**（Trae / Trae CN / Trae Work / Trae Work CN），自动扫描各版默认数据目录。
+- Web 设置新增 **「额外扫描目录」**：自定义 Codex / Trae 等非默认会话目录（如自定义 `CODEX_HOME`）不再需要改代码。
+- 修复导出 schema 校验：记录类型补充 `agent`（此前含 agent 会话的导出无法通过校验）。
+- 依赖安全升级：`fast-uri` 3.1.7（修复 GHSA-v39h-62p7-jpjc / GHSA-q3j6-qgpj-74h6）。
 
 #### v2.1.0
 
@@ -439,6 +446,13 @@ Yes. Scanning covers all variants: `.trae/`, `Library/Application Support/Trae*`
 Check in order: ① make sure the tool actually produced sessions; ② whether sessions live outside any scanned directory; ③ whether the scan log shows a non-zero "Found N candidate files"; ④ if the file format is unsupported, try **Import** instead.
 
 ### Changelog
+
+#### v2.1.1
+
+- **Full Trae family support** (Trae / Trae CN / Trae Work / Trae Work CN); all default data dirs are scanned automatically.
+- New **"Extra scan directories"** setting in the web UI: point the scanner at custom Codex/Trae session dirs (e.g. custom `CODEX_HOME`) without editing code.
+- Fix schema validation on export: `agent` records are now valid (previously agent sessions failed validation).
+- Security: bumped `fast-uri` to 3.1.7 (fixes GHSA-v39h-62p7-jpjc / GHSA-q3j6-qgpj-74h6).
 
 #### v2.1.0
 
