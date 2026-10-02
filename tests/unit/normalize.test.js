@@ -5,7 +5,9 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { normalizeAll, identifyType, normalizeMetaSource } from "../../core/normalize.js";
+import { normalizeAll, identifyType, normalizeMetaSource, ALLOWED_SOURCES } from "../../core/normalize.js";
+import { validateThread, THREAD_SCHEMA } from "../../core/schema-validator.js";
+import { inferSourceFromVscdbPath } from "../../core/cursor_sqlite.js";
 
 describe("identifyType", () => {
   it("returns plan for plan files",       () => assert.equal(identifyType("/path/to/plan.json"), "plan"));
@@ -106,5 +108,50 @@ describe("normalizeAll — regression for non-string content", () => {
     assert.ok(records.length >= 1);
     assert.equal(typeof records[0].messages[0].content, "string");
     assert.ok(records[0].messages[0].content.includes("Complex content"));
+  });
+});
+
+// ── Regression: schema meta.source enum must never drift from ALLOWED_SOURCES ──
+describe("schema-validator source enum alignment", () => {
+  const schemaSources = new Set(THREAD_SCHEMA.properties.meta.properties.source.enum);
+
+  it("every ALLOWED_SOURCES value is accepted by the schema (no drift)", () => {
+    for (const src of ALLOWED_SOURCES) {
+      const rec = {
+        schema_version: "1.0.0",
+        thread_id: "t",
+        type: "thread",
+        messages: [{ role: "user", content: "hi" }],
+        meta: { source: src, project: "p", created_at: new Date().toISOString() },
+      };
+      const { valid, errors } = validateThread(rec);
+      assert.ok(valid, `source '${src}' should validate; errors: ${errors.join("; ")}`);
+    }
+  });
+
+  it("schema enum contains exactly ALLOWED_SOURCES (no extras, no missing)", () => {
+    assert.deepEqual([...schemaSources].sort(), [...ALLOWED_SOURCES].sort());
+  });
+});
+
+// ── Regression: cursor_sqlite Claude vscdb must map to claude_code (not 'claude') ──
+describe("cursor_sqlite inferSourceFromVscdbPath", () => {
+  it("Claude workspaceStorage → claude_code (in ALLOWED_SOURCES + schema)", () => {
+    const src = inferSourceFromVscdbPath(
+      "/Users/u/Library/Application Support/Claude/User/workspaceStorage/hash/state.vscdb"
+    );
+    assert.equal(src, "claude_code");
+    assert.ok(ALLOWED_SOURCES.has(src));
+    assert.ok(THREAD_SCHEMA.properties.meta.properties.source.enum.includes(src));
+  });
+
+  it("Cursor / Trae CN paths stay in allowed set", () => {
+    for (const p of [
+      "/Users/u/Library/Application Support/Cursor/User/workspaceStorage/h/state.vscdb",
+      "/Users/u/Library/Application Support/Trae CN/User/workspaceStorage/h/state.vscdb",
+    ]) {
+      const src = inferSourceFromVscdbPath(p);
+      assert.ok(ALLOWED_SOURCES.has(src), `${p} -> ${src} not in ALLOWED_SOURCES`);
+    }
   });
 });

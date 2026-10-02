@@ -23,13 +23,13 @@ import crypto from "node:crypto";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import { AgentTransformer } from "../../adapter/index.js";
+import { EXPORTER_VERSION } from "../../core/version.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const VIEWER_DIR = path.resolve(__dirname, "../../viewer");
 const OUTPUT_DIR = path.resolve("./agent-backup");
 
-const EXPORTER_VERSION = "2.0.0";
 const SCHEMA_VERSION = "1.0.0";
 
 // ─── Router ───────────────────────────────────────────────────────────────────

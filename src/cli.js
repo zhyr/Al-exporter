@@ -6,9 +6,10 @@
  */
 
 import { configureLogger, log } from "./logger.js";
+import { EXPORTER_VERSION } from "../core/version.js";
 
 const HELP = `
-AI Exporter v2.0.0
+AI Exporter v${EXPORTER_VERSION}
 Export, backup, and analyze AI coding tool conversations.
 
 Usage:

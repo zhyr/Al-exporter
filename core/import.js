@@ -175,7 +175,7 @@ function convertToNativeFormat(records, source) {
             content: m.content
           }
         };
-        const hash = crypto.createHash('md5').update(m.content || '').digest('hex').slice(0, 8);
+        const hash = crypto.createHash('sha256').update(m.content || '').digest('hex').slice(0, 8);
         output[`session-${hash}.jsonl`] = JSON.stringify(line);
       }
     }
@@ -192,7 +192,7 @@ function convertToNativeFormat(records, source) {
         '',
         ...(r.messages?.map(m => `## ${m.role}\n\n${m.content}`) || [])
       ].join('\n');
-      const hash = crypto.createHash('md5').update(r.thread_id || '').digest('hex').slice(0, 8);
+      const hash = crypto.createHash('sha256').update(r.thread_id || '').digest('hex').slice(0, 8);
       output[`session-${hash}.md`] = md;
     }
   }
@@ -204,7 +204,7 @@ function convertToNativeFormat(records, source) {
         timestamp: r.meta?.created_at,
         messages: r.messages
       };
-      const hash = crypto.createHash('md5').update(r.thread_id || '').digest('hex').slice(0, 8);
+      const hash = crypto.createHash('sha256').update(r.thread_id || '').digest('hex').slice(0, 8);
       output[`conversation-${hash}.jsonl`] = JSON.stringify(line);
     }
   }
@@ -224,7 +224,7 @@ function convertToNativeFormat(records, source) {
         created: r.meta?.created_at,
         messages: r.messages
       };
-      const hash = crypto.createHash('md5').update(r.thread_id || '').digest('hex').slice(0, 8);
+      const hash = crypto.createHash('sha256').update(r.thread_id || '').digest('hex').slice(0, 8);
       output[`session-${hash}.jsonl`] = JSON.stringify(line);
     }
   }

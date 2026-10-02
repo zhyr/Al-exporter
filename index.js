@@ -11,13 +11,13 @@
 import { scanAllTools } from "./core/scan.js";
 import { normalizeAll, SCHEMA_VERSION } from "./core/normalize.js";
 import { collectAllVscdbRecords } from "./core/cursor_sqlite.js";
+import { EXPORTER_VERSION } from "./core/version.js";
 import fs from "fs-extra";
 import path from "path";
 import crypto from "crypto";
 
 const OUTPUT_DIR   = "./agent-backup";
 const VIEWER_DIR   = "./viewer";
-const EXPORTER_VERSION = "2.0.0";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

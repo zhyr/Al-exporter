@@ -201,6 +201,13 @@ const PATH_PATTERNS = [
   ".config/warp",
   "Library/Application Support/Warp",
   "Library/Application Support/com.rdejong.warp-mcp",
+
+  // HaxiTAG Forge — project works + agents (also pass absolute extraDirs from Foundry collector)
+  ".Forge-agents",
+  ".Forge-config",
+  ".forge/works",
+  "work/forge/.forge-e2e-works",
+  "work/forge/docs/logs",
 ];
 
 const GLOB_EXTENSIONS = "**/*.{json,jsonl,md,txt,log,mdc,cursorrules,yaml,yml}";
@@ -233,7 +240,7 @@ const DEEP_SCAN_PATTERNS = [
   ".cursor", ".claude", ".antigravity", ".gemini", ".augment",
   ".kiro", ".codex", ".opencode", ".qoder", ".codebuddy", ".workbuddy",
   ".trae", ".trae-work", ".zcode", ".windsurf", ".iflow", ".continue", ".deepseek",
-  ".tongyi", ".devin", ".replit"
+  ".tongyi", ".devin", ".replit", ".Forge-agents", ".forge-e2e-works", ".forge/works"
 ];
 
 /**

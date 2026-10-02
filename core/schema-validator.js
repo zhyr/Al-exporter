@@ -4,8 +4,13 @@
  */
 
 import Ajv from "ajv";
+import { ALLOWED_SOURCES } from "./normalize.js";
 
 const ajv = new Ajv({ allErrors: true, strict: false });
+
+// meta.source enum is the single source of truth: derived from normalize.ALLOWED_SOURCES
+// so the validator can never drift from what normalize() actually emits.
+const SOURCE_ENUM = [...ALLOWED_SOURCES].sort();
 
 // Unified thread record schema (§6 data model v1.0.0)
 const THREAD_SCHEMA = {
@@ -65,11 +70,7 @@ const THREAD_SCHEMA = {
       properties: {
         source: {
           type: "string",
-          enum: [
-            "cursor", "antigravity", "codex", "augment", "claude_code",
-            "iflow", "trae", "codebuddy", "workbuddy", "zcode", "qoder", "windsurf",
-            "vscode_copilot", "imported", "api_capture", "unknown", "other",
-          ],
+          enum: SOURCE_ENUM,
         },
         project:                { type: "string" },
         created_at:             { type: "string" },

@@ -61,7 +61,7 @@ export function inferSourceFromVscdbPath(dbPath) {
   if (p.includes("/codebuddy/")) return "codebuddy";
   if (p.includes("/qoder/")) return "qoder";
   if (p.includes("/augment/")) return "augment";
-  if (p.includes("/claude/")) return "claude";
+  if (p.includes("/claude/")) return "claude_code";
   if (p.includes("/cursor/")) return "cursor";
   if (p.includes("/code - insiders/")) return "vscode_copilot";
   if (p.includes("/code/")) return "vscode_copilot";
@@ -298,10 +298,10 @@ function extractMessages(parsed, key = "") {
   if (key === "aiService.generations" && parsed && typeof parsed === "object") {
     const entries = Object.values(parsed).filter(g => g?.textDescription);
     if (entries.length > 0) {
-      // Each generation is a single message (AI response)
-      // We reconstruct as: user message (from textDescription) -> assistant message
-      const messages = entries.map((g, i) => ({
-        role: i === 0 ? "user" : "assistant", // First entry as user prompt, rest as AI responses
+      // Each entry is an AI generation (textDescription describes what was produced).
+      // No user prompt is stored in this key, so all entries are assistant messages.
+      const messages = entries.map((g) => ({
+        role: "assistant",
         content: g.textDescription || "",
         ...(g.unixMs ? { timestamp: new Date(g.unixMs).toISOString() } : {}),
       }));

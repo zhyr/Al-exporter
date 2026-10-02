@@ -9,9 +9,8 @@ import crypto from "node:crypto";
 import { scanAllTools } from "../../core/scan.js";
 import { normalizeAll, SCHEMA_VERSION } from "../../core/normalize.js";
 import { collectAllVscdbRecords } from "../../core/cursor_sqlite.js";
+import { EXPORTER_VERSION } from "../../core/version.js";
 import log from "../logger.js";
-
-const EXPORTER_VERSION = "2.0.0";
 
 function threadHash(record) {
   return crypto.createHash("sha1").update(JSON.stringify(record)).digest("hex").slice(0, 12);

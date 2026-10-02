@@ -32,6 +32,8 @@ export async function safeReadHeader(file, bytes = 512) {
 const CHAT_KEYWORDS = [
   "messages", "history", "threads", "conversation", "role", "assistant",
   "plan", "mcp", "convo", "chat", "session", "bubbles", "aiChat",
+  // Forge / agent runtime run_logs
+  "trace_id", "tool_id", "payload", "agent_start", "agent_end", "lane_task", "event",
 ];
 
 /**
@@ -98,6 +100,13 @@ const TOOL_RULES = [
   ["iflow", "iflow"],
   // Trae
   ["trae", "trae"],
+  // Forge (HaxiTAG) — specific path markers only
+  ["forge-e2e", "forge"],
+  [".forge-agents", "forge"],
+  [".forge-config", "forge"],
+  [".forge/works", "forge"],
+  ["forge.app", "forge"],
+  ["haxitag forge", "forge"],
   // WorkBuddy (Tencent, CodeBuddy work line) — before CodeBuddy
   ["workbuddy", "workbuddy"],
   // CodeBuddy

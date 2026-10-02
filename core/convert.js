@@ -8,6 +8,10 @@
  *   - stats summary
  */
 
+import pLimit from "p-limit";
+import path from "node:path";
+import fs from "fs-extra";
+
 // ─── Training JSONL (SFT) ─────────────────────────────────────────────────────
 
 /**
@@ -225,10 +229,6 @@ export function computeStats(records, groupBy = ["project", "source"]) {
     groups: Object.values(groups).sort((a, b) => b.threads - a.threads),
   };
 }
-
-import pLimit from 'p-limit';
-import path from 'node:path';
-import fs from 'fs-extra';
 
 /**
  * 保存记录到指定目录

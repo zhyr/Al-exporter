@@ -12,6 +12,7 @@ export const ALLOWED_SOURCES = new Set([
   // Common local tooling IDs seen in paths / exports (kept explicit for UI + stats)
   "cline", "zed", "kiro",
   "workbuddy", "zcode",
+  "forge",
 ]);
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -51,6 +52,9 @@ export function normalizeMetaSource(rawSource) {
     "roo-cline": "cline",
     workbuddy: "workbuddy",
     zcode: "zcode",
+    forge: "forge",
+    "forge-agents": "forge",
+    "forge-e2e": "forge",
   };
   const resolved = ALIASES[s] ?? s;
   return ALLOWED_SOURCES.has(resolved) ? resolved : "other";
