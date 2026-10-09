@@ -12,6 +12,8 @@ const PATTERNS = [
   { type: "AWS_AccessKey", regex: /(?<![A-Z0-9])(?:AKIA|ABIA|ACCA|ASIA)[A-Z0-9]{16}(?![A-Z0-9])/g },
 ];
 
+export { PATTERNS as DESENSITIZE_PATTERNS };
+
 async function getAllFiles(dir) {
   const files = [];
   try {

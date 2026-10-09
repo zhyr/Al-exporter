@@ -1,6 +1,13 @@
 import path from "path";
 import crypto from "crypto";
 import { detectTool } from "./utils.js";
+import {
+  expandMessage,
+  expandMessageList,
+  sessionGroupsFromParsed,
+  runtimeMessagesFromText,
+  pathLooksLikeRuntimeLog,
+} from "./content.js";
 
 export const SCHEMA_VERSION = "1.0.0";
 
@@ -13,6 +20,7 @@ export const ALLOWED_SOURCES = new Set([
   "cline", "zed", "kiro",
   "workbuddy", "zcode",
   "forge",
+  "traework",
 ]);
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -52,6 +60,9 @@ export function normalizeMetaSource(rawSource) {
     "roo-cline": "cline",
     workbuddy: "workbuddy",
     zcode: "zcode",
+    traework: "traework",
+    "trae-work": "traework",
+    "trae work": "traework",
     forge: "forge",
     "forge-agents": "forge",
     "forge-e2e": "forge",
@@ -79,51 +90,73 @@ function makeId(filePath) {
 }
 
 function normalizeItem(item) {
-  const type = identifyType(item.path);
+  let type = identifyType(item.path);
   const toolSource = normalizeMetaSource(detectTool(item.path));
   const ext = path.extname(item.path).toLowerCase();
 
-  const { messages, context, prompt, confidence, warnings } = extractContent(
-    item.content,
-    item.path,
-    ext
-  );
+  const extracted = extractContent(item.content, item.path, ext);
+  if (extracted.runtimeLog) type = "log";
 
-  // If no messages at all, still emit a config/rule entry to not lose data
-  if (messages.length === 0 && !["thread", "plan", "task", "walkthrough", "artifact"].includes(type)) {
-    // Config/rule: emit as single system message
-    const tokens = estimateTokens(item.content);
-    return [buildRecord({
-      type, toolSource, item, messages: [{ role: "system", content: item.content }],
-      context: { files: [], diffs: [] }, prompt: path.basename(item.path),
-      tokens, confidence: "low", warnings,
-    })];
+  const groups = extracted.sessions?.length
+    ? extracted.sessions
+    : [{ id: null, messages: extracted.messages || [] }];
+
+  const records = [];
+  for (const group of groups) {
+    const rawMessages = group.messages || [];
+    const healthWarnings = [...(extracted.warnings || [])];
+    const missingRole = rawMessages.filter((m) => !m.role || m.role === "unknown").length;
+    if (missingRole > 0) healthWarnings.push(`${missingRole} message(s) have missing/unknown role`);
+    const emptyContent = rawMessages.filter((m) => {
+      if (m.content == null) return true;
+      if (typeof m.content !== "string") return false;
+      return m.content.trim() === "";
+    }).length;
+    if (emptyContent > 0) healthWarnings.push(`${emptyContent} message(s) have empty content`);
+    const messages = rawMessages.filter((m) => typeof m.content === "string" && m.content.trim() !== "");
+
+    // Config/rule with no chat: keep the file body. Chat-shaped files with nothing to keep are dropped.
+    if (messages.length === 0 && !["thread", "plan", "task", "walkthrough", "artifact", "log"].includes(type)) {
+      const tokens = estimateTokens(item.content);
+      records.push(buildRecord({
+        type, toolSource, item, messages: [{ role: "system", content: item.content }],
+        context: { files: [], diffs: [] }, prompt: path.basename(item.path),
+        tokens, confidence: "low", warnings: healthWarnings, sessionId: group.id,
+        runtimeLog: false,
+      }));
+      continue;
+    }
+
+    if (messages.length === 0) continue;
+
+    if (item.size > 1024 * 1024) {
+      healthWarnings.push(`Large file: ${(item.size / 1024 / 1024).toFixed(1)}MB`);
+    }
+    const firstUser = messages.find((m) => m.role === "user");
+    const prompt = (typeof firstUser?.content === "string" ? firstUser.content.slice(0, 120) : null)
+      || extracted.prompt
+      || null;
+    const tokens = estimateTokens(messages.map((m) => m.content || "").join(""));
+    records.push(buildRecord({
+      type, toolSource, item, messages,
+      context: extracted.context,
+      prompt, tokens,
+      confidence: extracted.confidence,
+      warnings: healthWarnings,
+      sessionId: group.id,
+      runtimeLog: Boolean(extracted.runtimeLog),
+    }));
   }
-
-  if (messages.length === 0 && !prompt) return [];
-
-  const textContent = messages.map((m) => m.content || "").join("");
-  const tokens = estimateTokens(textContent);
-
-  // Check for potential issues and add health warnings
-  const healthWarnings = [...warnings];
-  const missingRole = messages.filter((m) => !m.role || m.role === "unknown").length;
-  if (missingRole > 0) healthWarnings.push(`${missingRole} message(s) have missing/unknown role`);
-  const emptyContent = messages.filter((m) => {
-    if (!m.content) return true;
-    if (typeof m.content !== "string") return false;
-    return m.content.trim() === "";
-  }).length;
-  if (emptyContent > 0) healthWarnings.push(`${emptyContent} message(s) have empty content`);
-  if (item.size > 1024 * 1024) healthWarnings.push(`Large file: ${(item.size / 1024 / 1024).toFixed(1)}MB`);
-
-  return [buildRecord({ type, toolSource, item, messages, context, prompt, tokens, confidence, warnings: healthWarnings })];
+  return records;
 }
 
-function buildRecord({ type, toolSource, item, messages, context, prompt, tokens, confidence, warnings }) {
+function buildRecord({ type, toolSource, item, messages, context, prompt, tokens, confidence, warnings, sessionId, runtimeLog }) {
+  const extra = {};
+  if (sessionId) extra.session_id = sessionId;
+  if (runtimeLog) extra.kind = "runtime_log";
   const record = {
     schema_version: SCHEMA_VERSION,
-    thread_id: makeId(item.path),
+    thread_id: sessionId ? makeId(`${item.path}\0${sessionId}`) : makeId(item.path),
     type,
     messages,
     context: {
@@ -139,6 +172,7 @@ function buildRecord({ type, toolSource, item, messages, context, prompt, tokens
       tokens,
       prompt: prompt || path.basename(item.path, path.extname(item.path)),
       recognition_confidence: confidence,
+      ...(Object.keys(extra).length ? { extra } : {}),
     },
   };
   if (warnings.length > 0) record.meta.warnings = warnings;
@@ -168,14 +202,32 @@ function estimateTokens(text = "") {
 // ─── Content extraction dispatcher ───────────────────────────────────────────
 
 function extractContent(content, filePath, ext) {
-  if (!content) return { messages: [], context: { files: [], diffs: [] }, prompt: null, confidence: "unknown", warnings: [] };
-  if (ext === ".md" || ext === ".mdc" || ext === ".cursorrules") return extractFromMarkdown(content);
-  if (ext === ".jsonl") return extractFromJsonl(content);
-  if (ext === ".json" || ext === ".db" || ext === "" || ext === ".log") return extractFromJson(content);
-  // Fallback: try JSON, then markdown
-  const jsonResult = extractFromJson(content);
-  if (jsonResult.messages.length > 0) return jsonResult;
-  return extractFromMarkdown(content);
+  const empty = { messages: [], context: { files: [], diffs: [] }, prompt: null, confidence: "unknown", warnings: [] };
+  if (!content) return empty;
+  let result;
+  if (ext === ".md" || ext === ".mdc" || ext === ".cursorrules") result = extractFromMarkdown(content);
+  else if (ext === ".jsonl") result = extractFromJsonl(content);
+  else if (ext === ".json" || ext === ".db" || ext === "" || ext === ".log") result = extractFromJson(content);
+  else {
+    const jsonResult = extractFromJson(content);
+    result = (jsonResult.messages.length > 0 || jsonResult.sessions?.length) ? jsonResult : extractFromMarkdown(content);
+  }
+  const chat = (result.messages || []).some((m) => m.role === "user" || m.role === "assistant")
+    || (result.sessions || []).length > 0;
+  if (!chat && pathLooksLikeRuntimeLog(filePath)) {
+    const events = runtimeMessagesFromText(content);
+    if (events.length) {
+      return {
+        messages: events,
+        context: { files: [], diffs: [] },
+        prompt: events[0].content.slice(0, 120),
+        confidence: "low",
+        warnings: result.warnings || [],
+        runtimeLog: true,
+      };
+    }
+  }
+  return result;
 }
 
 // ─── Markdown extractor ───────────────────────────────────────────────────────
@@ -233,26 +285,27 @@ function extractFromJsonl(content) {
 
   for (const line of content.split("\n")) {
     if (!line.trim()) continue;
+    const before = messages.length;
+    let lineSession = null;
     try {
       const parsed = JSON.parse(line);
+      lineSession = parsed.sessionId || parsed.session_id || parsed.trace_id || null;
       
       // iFlow session format: { uuid, sessionId, type, message: { role, content } }
       if (parsed.sessionId && parsed.type && parsed.message && parsed.message?.role) {
-        const msgContent = extractContentFromIMessage(parsed.message);
-        messages.push({
-          role: parsed.message.role === "assistant" ? "assistant" : "user",
-          content: msgContent,
-          ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {}),
-        });
+        for (const m of expandMessage({ ...parsed.message, timestamp: parsed.message.timestamp || parsed.timestamp })) {
+          messages.push(m);
+        }
+        for (let i = before; i < messages.length; i++) messages[i]._sessionId = lineSession || null;
         continue;
       }
       
       if (parsed.role && (parsed.content !== undefined || parsed.text !== undefined)) {
-        messages.push({ role: parsed.role, content: parsed.content ?? parsed.text ?? "" });
-      } else if (Array.isArray(parsed.messages)) {
-        for (const m of parsed.messages) {
-          messages.push({ role: m.role || "unknown", content: m.content ?? m.text ?? "" });
+        for (const m of expandMessage({ ...parsed, content: parsed.content ?? parsed.text })) {
+          messages.push(m);
         }
+      } else if (Array.isArray(parsed.messages)) {
+        for (const m of expandMessageList(parsed.messages)) messages.push(m);
       } else if (parsed.instruction !== undefined) {
         // SFT format
         if (parsed.instruction) messages.push({ role: "user", content: parsed.instruction + (parsed.input ? `\n${parsed.input}` : "") });
@@ -278,7 +331,8 @@ function extractFromJsonl(content) {
           messages.push({
             role: "assistant",
             content: `[Function Call] ${parsed.name}(${parsed.arguments})`,
-            ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {})
+            ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {}),
+            meta: { kind: "tool_use", name: parsed.name },
           });
         }
       } else if (parsed.type === "function_call_output") {
@@ -287,7 +341,8 @@ function extractFromJsonl(content) {
           messages.push({
             role: "user",
             content: `[Function Output] ${parsed.output}`,
-            ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {})
+            ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {}),
+            meta: { kind: "tool_result", ...(parsed.name ? { name: parsed.name } : {}) },
           });
         }
       } else if (parsed.type === "custom_tool_call") {
@@ -396,7 +451,8 @@ function extractFromJsonl(content) {
           messages.push({
             role: "assistant",
             content: `[Tool Use] ${parsed.name}\n${toolInput}`,
-            ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {})
+            ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {}),
+            meta: { kind: "tool_use", name: parsed.name },
           });
         }
       } else if (parsed.type === "tool_result") {
@@ -407,7 +463,8 @@ function extractFromJsonl(content) {
           messages.push({
             role: "user",
             content: isError ? `[Tool Error] ${resultContent}` : `[Tool Result] ${resultContent}`,
-            ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {})
+            ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {}),
+            meta: { kind: "tool_result", ...(parsed.name ? { name: parsed.name } : {}) },
           });
         }
       } else if (parsed.type === "mcp_tool_call") {
@@ -531,13 +588,44 @@ function extractFromJsonl(content) {
     } catch {
       warnings.push(`Skipped invalid JSONL line`);
     }
+    for (let i = before; i < messages.length; i++) {
+      messages[i]._sessionId = lineSession || null;
+    }
   }
 
-  const firstUser = messages.find((m) => m.role === "user");
-  const prompt = typeof firstUser?.content === "string" 
-    ? firstUser.content.slice(0, 120) 
-    : (firstUser?.content ? String(firstUser.content).slice(0, 120) : null);
-  return { messages, context, prompt, confidence: messages.length > 0 ? "high" : "unknown", warnings };
+  return finalizeJsonl(messages, context, warnings);
+}
+
+function finalizeJsonl(messages, context, warnings) {
+  const sawSession = messages.some((m) => m._sessionId);
+  const strip = (m) => {
+    const { _sessionId, ...rest } = m;
+    return rest;
+  };
+  if (!sawSession) {
+    const clean = messages.map(strip);
+    const firstUser = clean.find((m) => m.role === "user");
+    const prompt = typeof firstUser?.content === "string" ? firstUser.content.slice(0, 120) : null;
+    return { messages: clean, context, prompt, confidence: clean.length > 0 ? "high" : "unknown", warnings };
+  }
+  const buckets = new Map();
+  for (const m of messages) {
+    const id = m._sessionId || "ungrouped";
+    if (!buckets.has(id)) buckets.set(id, []);
+    buckets.get(id).push(strip(m));
+  }
+  const sessions = [...buckets.entries()].map(([id, msgs]) => ({ id, messages: msgs }));
+  const flat = sessions.flatMap((s) => s.messages);
+  const firstUser = flat.find((m) => m.role === "user");
+  const prompt = typeof firstUser?.content === "string" ? firstUser.content.slice(0, 120) : null;
+  return {
+    messages: flat,
+    sessions,
+    context,
+    prompt,
+    confidence: flat.length > 0 ? "high" : "unknown",
+    warnings,
+  };
 }
 
 // ─── JSON extractor with multi-schema detection ───────────────────────────────
@@ -576,23 +664,14 @@ function detectJsonSchema(parsed) {
   if (parsed?.composerData?.conversation) {
     const conv = parsed.composerData.conversation;
     if (Array.isArray(conv)) {
-      const messages = conv.map((m) => ({
-        role: m.role || (m.type === "ai" ? "assistant" : "user"),
-        content: typeof m.content === "string" ? m.content : (m.text || (m.content ? JSON.stringify(m.content) : "")),
-        ...(m.timestamp ? { timestamp: m.timestamp } : {}),
-      }));
+      const messages = expandMessageList(conv);
       return { schemaName: "cursor-composer", messages, context: { files: [], diffs: [] } };
     }
   }
 
   // 3. OpenAI / standard messages array: { messages: [{ role, content }] }
   if (Array.isArray(parsed?.messages) && parsed.messages[0]?.role !== undefined) {
-    const messages = parsed.messages.map((m) => ({
-      role: m.role || "unknown",
-      content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
-      ...(m.timestamp ? { timestamp: m.timestamp } : {}),
-      ...(m.model ? { model: m.model } : {}),
-    }));
+    const messages = expandMessageList(parsed.messages);
     const context = {
       files: parsed.files || parsed.context?.files || [],
       diffs: parsed.diffs || parsed.context?.diffs || [],
@@ -603,10 +682,7 @@ function detectJsonSchema(parsed) {
   // 4. Claude conversation schema: { conversation: [{ role, content }] } or { history: [...] }
   const claudeArray = parsed?.conversation || parsed?.history;
   if (Array.isArray(claudeArray) && claudeArray[0]?.role !== undefined) {
-    const messages = claudeArray.map((m) => ({
-      role: m.role || "unknown",
-      content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
-    }));
+    const messages = expandMessageList(claudeArray);
     return { schemaName: "claude-conversation", messages, context: { files: [], diffs: [] } };
   }
 
@@ -622,22 +698,14 @@ function detectJsonSchema(parsed) {
 
   // 6. Generic flat array of messages: [{ role, content }]
   if (Array.isArray(parsed) && parsed[0]?.role) {
-    const messages = parsed.map((m) => ({
-      role: m.role || "unknown",
-      content: typeof m.content === "string" ? m.content : (m.text || (m.content ? JSON.stringify(m.content) : "")),
-    }));
+    const messages = expandMessageList(parsed);
     return { schemaName: "flat-array", messages, context: { files: [], diffs: [] } };
   }
 
   // 7. Convo / threads fallback
   const fallbackArray = parsed?.convo || parsed?.threads;
   if (Array.isArray(fallbackArray) && fallbackArray.length > 0) {
-    const messages = fallbackArray.flatMap((t) =>
-      (t.messages || [t]).map((m) => ({
-        role: m.role || "unknown",
-        content: typeof m.content === "string" ? m.content : (m.text || (m.content ? JSON.stringify(m.content) : "")),
-      }))
-    );
+    const messages = fallbackArray.flatMap((t) => expandMessageList(t.messages || [t]));
     return { schemaName: "generic-convo", messages, context: { files: [], diffs: [] } };
   }
 
@@ -648,6 +716,19 @@ function extractFromJson(content) {
   const warnings = [];
   try {
     const parsed = JSON.parse(content);
+    const groups = sessionGroupsFromParsed(parsed);
+    if (groups.length > 0) {
+      const messages = groups.flatMap((g) => g.messages);
+      const firstUser = messages.find((m) => m.role === "user");
+      return {
+        messages,
+        sessions: groups,
+        context: { files: [], diffs: [] },
+        prompt: typeof firstUser?.content === "string" ? firstUser.content.slice(0, 120) : null,
+        confidence: "high",
+        warnings,
+      };
+    }
     const detected = detectJsonSchema(parsed);
 
     if (detected) {
@@ -656,17 +737,6 @@ function extractFromJson(content) {
       const prompt = firstUser?.content?.slice(0, 120) ?? null;
       const confidence = ["cursor-tabs", "cursor-composer", "openai-messages", "claude-conversation", "sharegpt"].includes(schemaName) ? "high" : "low";
       return { messages, context, prompt, confidence, warnings };
-    }
-
-    // Config-like object (no messages found): emit as system message with low confidence
-    if (typeof parsed === "object" && parsed !== null && Object.keys(parsed).length >= 2) {
-      return {
-        messages: [{ role: "system", content: JSON.stringify(parsed, null, 2) }],
-        context: { files: [], diffs: [] },
-        prompt: null,
-        confidence: "low",
-        warnings,
-      };
     }
 
     return { messages: [], context: { files: [], diffs: [] }, prompt: null, confidence: "unknown", warnings };
@@ -760,14 +830,19 @@ function extractContentFromResponseItem(item) {
   
   if (type === "tool_use" && item.name) {
     const toolInput = item.input ? JSON.stringify(item.input, null, 2) : '';
-    return { role: "assistant", content: `[Tool Use] ${item.name}\n${toolInput}` };
+    return {
+      role: "assistant",
+      content: `[Tool Use] ${item.name}\n${toolInput}`,
+      meta: { kind: "tool_use", name: item.name },
+    };
   }
   
   if (type === "tool_result" && item.content !== undefined) {
     const isError = item.is_error;
     return { 
       role: "user", 
-      content: isError ? `[Tool Error] ${item.content}` : `[Tool Result] ${item.content}` 
+      content: isError ? `[Tool Error] ${item.content}` : `[Tool Result] ${item.content}`,
+      meta: { kind: "tool_result", ...(item.name ? { name: item.name } : {}) },
     };
   }
   

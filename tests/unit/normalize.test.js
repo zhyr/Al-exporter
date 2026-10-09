@@ -6,7 +6,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { normalizeAll, identifyType, normalizeMetaSource, ALLOWED_SOURCES } from "../../core/normalize.js";
-import { validateThread, THREAD_SCHEMA } from "../../core/schema-validator.js";
+import { validateThread, THREAD_SCHEMA, conformThreadRecord } from "../../core/schema-validator.js";
+import { extractEvidence } from "../../core/t2e/mine.js";
 import { inferSourceFromVscdbPath } from "../../core/cursor_sqlite.js";
 
 describe("identifyType", () => {
@@ -135,6 +136,46 @@ describe("schema-validator source enum alignment", () => {
 });
 
 // ── Regression: cursor_sqlite Claude vscdb must map to claude_code (not 'claude') ──
+describe("conformThreadRecord — shapes seen in real Forge exports", () => {
+  it("accepts string file paths and drops confidence medium", () => {
+    const record = conformThreadRecord({
+      schema_version: "1.0.0",
+      thread_id: "t",
+      type: "thread",
+      messages: [{ role: "user", content: "hello", timestamp: 1700000000 }],
+      context: { files: ["docs/report.md"], diffs: [] },
+      meta: {
+        source: "forge",
+        project: "p",
+        created_at: new Date().toISOString(),
+        recognition_confidence: "medium",
+        tokens: 1.2,
+      },
+    });
+    assert.equal(record.meta.recognition_confidence, "low");
+    assert.equal(record.meta.tokens, 1);
+    assert.deepEqual(record.context.files, [{ path: "docs/report.md" }]);
+    assert.equal(typeof record.messages[0].timestamp, "string");
+    const { valid, errors } = validateThread(record);
+    assert.ok(valid, errors.join("; "));
+  });
+});
+
+describe("extractEvidence reads structured tool calls", () => {
+  it("counts meta.kind tool_use and forge tool_calls without shell text", () => {
+    const evidence = extractEvidence([
+      { role: "user", content: "please look" },
+      { role: "assistant", content: "calling", meta: { kind: "tool_use", name: "grep" } },
+      { role: "assistant", content: "done", tool_calls: [{ name: "read_file" }] },
+      { role: "tool", name: "write", content: "wrote file" },
+    ]);
+    assert.ok(evidence.raw.hasToolCall);
+    assert.ok(evidence.raw.toolCalls.includes("grep"));
+    assert.ok(evidence.raw.toolCalls.includes("read_file"));
+    assert.ok(evidence.raw.toolCalls.includes("write"));
+  });
+});
+
 describe("cursor_sqlite inferSourceFromVscdbPath", () => {
   it("Claude workspaceStorage → claude_code (in ALLOWED_SOURCES + schema)", () => {
     const src = inferSourceFromVscdbPath(

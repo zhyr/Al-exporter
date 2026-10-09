@@ -1,3 +1,4 @@
+import os from "os";
 import fs from "fs-extra";
 import path from "path";
 
@@ -98,7 +99,10 @@ const TOOL_RULES = [
   ["antigravity", "antigravity"],
   // iFlow
   ["iflow", "iflow"],
-  // Trae
+  // Trae Work before Trae — "trae" is a substring of every Trae Work path
+  ["trae work", "traework"],
+  ["trae-work", "traework"],
+  ["traework", "traework"],
   ["trae", "trae"],
   // Forge (HaxiTAG) — specific path markers only
   ["forge-e2e", "forge"],
@@ -144,6 +148,108 @@ export function detectTool(filePath) {
     if (p.includes(keyword)) return source;
   }
   return "unknown";
+}
+
+// ─── IDE data directories (scan + vscdb share this list) ─────────────────────
+
+/** Dot-home dirs and a few XDG session roots that are not `Application Support/<App>`. */
+const IDE_DOT_DIRS = [
+  ".codebuddy",
+  ".config/codebuddy",
+  ".workbuddy",
+  ".config/workbuddy",
+  ".zcode",
+  ".config/zcode",
+  ".trae",
+  ".trae-work",
+  ".traework",
+  ".config/trae",
+  ".config/Trae/User/workspaceStorage",
+  ".config/Trae Work/User/workspaceStorage",
+  ".config/Trae Work CN/User/workspaceStorage",
+];
+
+/** Products whose default data dir we scan for chat / session / log files. */
+const NEW_IDE_APPS = [
+  "CodeBuddy",
+  "CodeBuddy CN",
+  "WorkBuddy",
+  "WorkBuddy CN",
+  "ZCode",
+  "Trae",
+  "Trae CN",
+  "Trae Work",
+  "Trae Work CN",
+];
+
+/** VS Code-family apps whose workspaceStorage may hold state.vscdb. */
+const VSCDB_APPS = [
+  "Cursor",
+  "Code",
+  "Code - Insiders",
+  "Windsurf",
+  "VSCodium",
+  "Antigravity",
+  "Qoder",
+  ...NEW_IDE_APPS,
+];
+
+const APP_DATA_SUBS = ["User/History", "User/workspaceStorage", "User/globalStorage"];
+
+function appDataRelative(platform, app, sub) {
+  if (platform === "win32") return path.join("AppData", "Roaming", app, sub);
+  if (platform === "linux") return path.join(".config", app, sub);
+  return path.join("Library", "Application Support", app, sub);
+}
+
+/**
+ * Home-relative directories to scan for CodeBuddy / WorkBuddy / ZCode / Trae.
+ * Existing Cursor / Claude / Codex patterns stay in scan.js; this list is additive.
+ * @param {string} [platform]
+ * @returns {string[]}
+ */
+export function ideScanRelativeDirs(platform = os.platform()) {
+  const dirs = [...IDE_DOT_DIRS];
+  for (const app of NEW_IDE_APPS) {
+    for (const sub of APP_DATA_SUBS) dirs.push(appDataRelative(platform, app, sub));
+  }
+  // macOS also honors XDG-style ~/.config/<App> (portable / Linux-layout installs)
+  if (platform === "darwin") {
+    for (const app of NEW_IDE_APPS) {
+      for (const sub of APP_DATA_SUBS) dirs.push(path.join(".config", app, sub));
+    }
+  }
+  return [...new Set(dirs)];
+}
+
+/**
+ * Absolute workspaceStorage roots that may contain *.vscdb.
+ * @param {string} [platform]
+ * @param {string} [home]
+ * @param {string} [appData] Windows %APPDATA%
+ * @returns {string[]}
+ */
+export function vscdbWorkspaceAbsPaths(
+  platform = os.platform(),
+  home = os.homedir(),
+  appData = process.env.APPDATA,
+) {
+  const rels = [];
+  for (const app of VSCDB_APPS) {
+    if (platform === "win32") {
+      rels.push(path.join(app, "User", "workspaceStorage"));
+    } else if (platform === "linux") {
+      rels.push(path.join(".config", app, "User", "workspaceStorage"));
+    } else {
+      rels.push(path.join("Library", "Application Support", app, "User", "workspaceStorage"));
+      rels.push(path.join(".config", app, "User", "workspaceStorage"));
+    }
+  }
+  if (platform === "win32") {
+    const base = appData || path.join(home, "AppData", "Roaming");
+    return [...new Set(rels.map((r) => path.join(base, r)))];
+  }
+  return [...new Set(rels.map((r) => path.join(home, r)))];
 }
 
 /**

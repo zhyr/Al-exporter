@@ -10,13 +10,13 @@
  */
 
 import Database from "better-sqlite3";
-import path from "path";
-import os from "os";
 import fs from "fs-extra";
 import crypto from "crypto";
 import { glob } from "glob";
 import pLimit from "p-limit";
 import { SCHEMA_VERSION } from "./normalize.js";
+import { vscdbWorkspaceAbsPaths } from "./utils.js";
+import { expandMessageList } from "./content.js";
 
 // Keys to query from the ItemTable
 // Use exact match (key = 'xxx') for specific keys, LIKE for patterns
@@ -53,9 +53,9 @@ export function inferSourceFromVscdbPath(dbPath) {
   if (p.includes("/antigravity/")) return "antigravity";
   if (p.includes("/windsurf/")) return "windsurf";
   if (p.includes("/vscodium/")) return "vscode_copilot";
-  // Trae family: Trae Work CN / Trae Work / Trae CN / Trae (intl) — all map to "trae"
-  if (p.includes("/trae work cn/")) return "trae";
-  if (p.includes("/trae work/")) return "trae";
+  // Trae Work before Trae — "trae" is a substring of every Trae Work path
+  if (p.includes("/trae work cn/") || p.includes("/trae-work/") || p.includes("/traework/")) return "traework";
+  if (p.includes("/trae work/")) return "traework";
   if (p.includes("/trae cn/")) return "trae";
   if (p.includes("/trae/")) return "trae";
   if (p.includes("/codebuddy/")) return "codebuddy";
@@ -72,63 +72,7 @@ export function inferSourceFromVscdbPath(dbPath) {
  * All known VS Code–family workspaceStorage roots (per OS). Missing dirs are skipped.
  */
 export function getVscdbWorkspaceRootCandidates() {
-  const home = os.homedir();
-  const plat = os.platform();
-  const macRel = [
-    "Library/Application Support/Cursor/User/workspaceStorage",
-    "Library/Application Support/Code/User/workspaceStorage",
-    "Library/Application Support/Code - Insiders/User/workspaceStorage",
-    "Library/Application Support/Windsurf/User/workspaceStorage",
-    "Library/Application Support/VSCodium/User/workspaceStorage",
-    "Library/Application Support/Antigravity/User/workspaceStorage",
-    "Library/Application Support/Trae/User/workspaceStorage",         // Trae (intl)
-    "Library/Application Support/Trae CN/User/workspaceStorage",      // Trae CN
-    "Library/Application Support/Trae Work/User/workspaceStorage",    // Trae Work
-    "Library/Application Support/Trae Work CN/User/workspaceStorage", // Trae Work CN
-    "Library/Application Support/CodeBuddy/User/workspaceStorage",    // CodeBuddy
-    "Library/Application Support/CodeBuddy CN/User/workspaceStorage",
-    "Library/Application Support/WorkBuddy/User/workspaceStorage",    // WorkBuddy
-    "Library/Application Support/WorkBuddy CN/User/workspaceStorage",
-    "Library/Application Support/ZCode/User/workspaceStorage",        // ZCode
-    "Library/Application Support/Qoder/User/workspaceStorage",        // Qoder
-  ];
-  const xdgRel = [
-    ".config/Cursor/User/workspaceStorage",
-    ".config/Code/User/workspaceStorage",
-    ".config/Code - Insiders/User/workspaceStorage",
-    ".config/Windsurf/User/workspaceStorage",
-    ".config/VSCodium/User/workspaceStorage",
-    ".config/Antigravity/User/workspaceStorage",
-    ".config/Trae/User/workspaceStorage",
-    ".config/Trae Work/User/workspaceStorage",
-    ".config/Trae Work CN/User/workspaceStorage",
-    ".config/CodeBuddy/User/workspaceStorage",
-    ".config/WorkBuddy/User/workspaceStorage",
-    ".config/ZCode/User/workspaceStorage",
-    ".config/Qoder/User/workspaceStorage",
-  ];
-  const out = [];
-  if (plat === "darwin") {
-    for (const r of macRel) out.push(path.join(home, r));
-    for (const r of xdgRel) out.push(path.join(home, r));
-  }
-  if (plat === "linux") {
-    for (const r of xdgRel) out.push(path.join(home, r));
-  }
-  if (plat === "win32") {
-    const appData = process.env.APPDATA || path.join(home, "AppData", "Roaming");
-    for (const r of [
-      "Cursor/User/workspaceStorage",
-      "Code/User/workspaceStorage",
-      "Code - Insiders/User/workspaceStorage",
-      "Windsurf/User/workspaceStorage",
-      "VSCodium/User/workspaceStorage",
-      "Antigravity/User/workspaceStorage",
-    ]) {
-      out.push(path.join(appData, r));
-    }
-  }
-  return [...new Set(out)];
+  return vscdbWorkspaceAbsPaths();
 }
 
 /**
@@ -251,7 +195,7 @@ export function readCursorSqlite(dbPath) {
             sqlite_key: row.key,
             tokens,
             prompt,
-            recognition_confidence: "high",
+            recognition_confidence: EXACT_KEYS.includes(row.key) ? "high" : "low",
           },
         });
       } catch {
@@ -278,13 +222,7 @@ function extractMessages(parsed, key = "") {
     const allMessages = [];
     for (const composer of parsed.allComposers) {
       if (Array.isArray(composer.conversation)) {
-        for (const m of composer.conversation) {
-          allMessages.push({
-            role: m.role || (m.type === "ai" ? "assistant" : "user"),
-            content: m.content || m.text || "",
-            ...(m.timestamp ? { timestamp: m.timestamp } : {}),
-          });
-        }
+        allMessages.push(...expandMessageList(composer.conversation));
         if (composer.createdAt && !createdAt) createdAt = new Date(composer.createdAt).toISOString();
         if (composer.lastUpdatedAt) updatedAt = new Date(composer.lastUpdatedAt).toISOString();
       }
@@ -315,11 +253,7 @@ function extractMessages(parsed, key = "") {
   if (parsed?.composerData?.conversation) {
     const conv = parsed.composerData.conversation;
     if (Array.isArray(conv) && conv.length > 0) {
-      const messages = conv.map((m) => ({
-        role: m.role || (m.type === "ai" ? "assistant" : "user"),
-        content: m.content || m.text || "",
-        ...(m.timestamp ? { timestamp: m.timestamp } : {}),
-      }));
+      const messages = expandMessageList(conv);
       createdAt = conv[0]?.timestamp || null;
       updatedAt = conv[conv.length - 1]?.timestamp || null;
       return { messages, createdAt, updatedAt };
@@ -333,10 +267,10 @@ function extractMessages(parsed, key = "") {
       const startTime = tab.bubbles?.[0]?.timingInfo?.clientStartTime;
       if (!createdAt && startTime) createdAt = new Date(startTime).toISOString();
       for (const bubble of tab.bubbles || []) {
-        messages.push({
+        messages.push(...expandMessageList([{
           role: bubble.type === "ai" ? "assistant" : "user",
           content: bubble.rawText || bubble.text || bubble.content || "",
-        });
+        }]));
       }
       const lastTime = tab.bubbles?.[tab.bubbles.length - 1]?.timingInfo?.clientStartTime;
       if (lastTime) updatedAt = new Date(lastTime).toISOString();
@@ -346,11 +280,7 @@ function extractMessages(parsed, key = "") {
 
   // 3. Standard messages array: { messages: [{ role, content }] }
   if (Array.isArray(parsed?.messages) && parsed.messages[0]?.role) {
-    const messages = parsed.messages.map((m) => ({
-      role: m.role || "unknown",
-      content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
-      ...(m.timestamp ? { timestamp: m.timestamp } : {}),
-    }));
+    const messages = expandMessageList(parsed.messages);
     createdAt = parsed.messages[0]?.timestamp || null;
     updatedAt = parsed.messages[parsed.messages.length - 1]?.timestamp || null;
     return { messages, createdAt, updatedAt };
@@ -365,11 +295,7 @@ function extractMessages(parsed, key = "") {
   for (const arr of candidateArrays) {
     if (!Array.isArray(arr) || arr.length === 0) continue;
     if (arr[0]?.role || arr[0]?.type) {
-      const messages = arr.map((m) => ({
-        role: m.role || (m.type === "ai" ? "assistant" : "user"),
-        content: m.content || m.text || m.rawText || "",
-        ...(m.timestamp ? { timestamp: m.timestamp } : {}),
-      }));
+      const messages = expandMessageList(arr);
       createdAt = arr[0]?.timestamp || null;
       updatedAt = arr[arr.length - 1]?.timestamp || null;
       return { messages, createdAt, updatedAt };
@@ -378,11 +304,11 @@ function extractMessages(parsed, key = "") {
 
   // 5. Roo-Cline task format: { taskHistory: [...] } or { messages: [{role,ts,content}] }
   if (Array.isArray(parsed?.taskHistory)) {
-    const messages = parsed.taskHistory.map((m) => ({
+    const messages = expandMessageList(parsed.taskHistory.map((m) => ({
       role: m.role || "user",
       content: m.content || m.text || "",
       ...(m.ts ? { timestamp: new Date(m.ts * 1000).toISOString() } : {}),
-    }));
+    })));
     if (messages.length > 0) {
       updatedAt = messages[messages.length - 1]?.timestamp || null;
       return { messages, createdAt, updatedAt };

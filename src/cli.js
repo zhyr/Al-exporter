@@ -26,6 +26,7 @@ Commands:
 Global Options:
   --log-level <level>    debug | info | warn | error  (default: info)
   --log-format json      Output structured JSON logs
+  --version, -v          Print version and exit
   --help, -h             Show this help
 
 export Options:
@@ -33,6 +34,7 @@ export Options:
   --format <fmt>         json | markdown | training-jsonl  (default: json)
   --since <ISO8601>      Only export records newer than this date
   --workers <n>          Concurrent file workers  (default: 8)
+  --redact               Redact secrets, API keys and PII before writing to disk
 
 scan Options:
   --json                 Output machine-readable JSON to stdout
@@ -63,6 +65,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--help" || a === "-h") { args.help = true; continue; }
+    if (a === "--version" || a === "-v") { args.version = true; continue; }
     if (a.startsWith("--")) {
       const key = a.slice(2);
       const next = argv[i + 1];
@@ -75,6 +78,24 @@ function parseArgs(argv) {
   return args;
 }
 
+/** Parse a positive integer, throw on invalid input. */
+function parsePositiveInt(value, name) {
+  const n = parseInt(value, 10);
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new Error(`Invalid --${name}: expected a positive integer, got '${value}'`);
+  }
+  return n;
+}
+
+/** Validate an ISO8601 date string, throw on invalid input. */
+function parseDate(value, name) {
+  const t = new Date(value).getTime();
+  if (!Number.isFinite(t)) {
+    throw new Error(`Invalid --${name}: expected an ISO8601 date, got '${value}'`);
+  }
+  return value;
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   const args = parseArgs(argv);
@@ -84,6 +105,11 @@ async function main() {
     level: args["log-level"] || "info",
     json: args["log-format"] === "json",
   });
+
+  if (args.version) {
+    process.stdout.write(`${EXPORTER_VERSION}\n`);
+    process.exit(0);
+  }
 
   const cmd = args._[0] || "export";
 
@@ -99,15 +125,16 @@ async function main() {
         const result = await runExport({
           output:  args.output  || "./agent-backup",
           format:  args.format  || "json",
-          since:   args.since   || null,
-          workers: args.workers ? parseInt(args.workers, 10) : 8,
+          since:   args.since   ? parseDate(args.since, "since") : null,
+          workers: args.workers ? parsePositiveInt(args.workers, "workers") : 8,
+          redact:  args.redact === true,
         });
-        log.info(`✅ Done  new=${result.new_items}  skipped=${result.skipped_items}  total=${result.total}`);
+        log.info(`✅ Done  new=${result.new_items}  skipped=${result.skipped_items}  total=${result.total}${result.redacted ? `  redacted=${result.redacted}` : ""}`);
         break;
       }
       case "scan": {
         const { runScan } = await import("./commands/scan.js");
-        await runScan({ json: args.json === true, workers: args.workers ? parseInt(args.workers, 10) : 8 });
+        await runScan({ json: args.json === true, workers: args.workers ? parsePositiveInt(args.workers, "workers") : 8 });
         break;
       }
       case "convert": {
@@ -127,7 +154,7 @@ async function main() {
       }
       case "serve": {
         const { runServe } = await import("./commands/serve.js");
-        await runServe({ host: args.host || "127.0.0.1", port: parseInt(args.port || "8080", 10) });
+        await runServe({ host: args.host || "127.0.0.1", port: args.port ? parsePositiveInt(args.port, "port") : 8080 });
         break;
       }
       default:

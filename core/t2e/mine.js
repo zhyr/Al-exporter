@@ -77,7 +77,7 @@ export async function mineEpisodes(records, opts = {}) {
   const episodes = [];
 
   for (const record of records) {
-    if (!record || record.type !== 'thread') continue;
+    if (!record || (record.type !== 'thread' && record.type !== 'agent')) continue;
     const msgs = record.messages || [];
     if (msgs.length === 0) continue;
 
@@ -268,6 +268,16 @@ export function extractEvidence(messages, record = {}) {
   const assistantText = messages.filter((m) => m.role === 'assistant').map((m) => m.content || '').join(' ');
 
   const toolCalls = [];
+  for (const msg of messages) {
+    if (msg?.meta?.kind === "tool_use" && msg.meta.name) toolCalls.push(String(msg.meta.name).slice(0, 500));
+    if (msg?.role === "tool" && msg.name) toolCalls.push(String(msg.name).slice(0, 500));
+    if (Array.isArray(msg?.tool_calls)) {
+      for (const call of msg.tool_calls) {
+        const name = call?.name || call?.function?.name;
+        if (name) toolCalls.push(String(name).slice(0, 500));
+      }
+    }
+  }
   // shell 代码块
   const shellRe = /```(?:bash|sh|shell|terminal)\s*\n([\s\S]*?)```/g;
   let m1;
@@ -291,7 +301,7 @@ export function extractEvidence(messages, record = {}) {
     assistantText,
     toolCalls,
     codeBlocks,
-    hasToolCall: TOOL_CALL_PATTERNS.some((re) => re.test(assistantText)),
+    hasToolCall: toolCalls.length > 0 || TOOL_CALL_PATTERNS.some((re) => re.test(assistantText)),
     toolCallCount: (assistantText.match(TOOL_CALL_PATTERNS[0]) || []).length + toolCalls.length,
     hasConclusion: CONCLUSION_PATTERNS.some((re) => re.test(assistantText)),
     hasSubagentNoise: SUBAGENT_PATTERNS.some((re) => re.test(text)),

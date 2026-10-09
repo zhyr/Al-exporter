@@ -1,6 +1,6 @@
 {
   "name": "ai-exporter",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "type": "module",
   "description": "Scan, backup, export and analyze conversations from AI coding tools (Cursor, Claude Code, Codex, and more)",
   "main": "src/cli.js",

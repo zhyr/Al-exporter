@@ -1,0 +1,2 @@
+{"trace_id":"tr-1","event":"agent_start","payload":{"lane":"edit"}}
+{"trace_id":"tr-1","event":"agent_end","payload":{"ok":true}}

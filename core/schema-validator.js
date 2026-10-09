@@ -23,7 +23,7 @@ const THREAD_SCHEMA = {
     thread_id:      { type: "string", minLength: 1 },
     type: {
       type: "string",
-      enum: ["thread", "agent", "plan", "task", "walkthrough", "artifact", "mcp", "rule", "config"],
+      enum: ["thread", "agent", "plan", "task", "walkthrough", "artifact", "mcp", "rule", "config", "log"],
     },
     messages: {
       type: "array",
@@ -95,6 +95,62 @@ const validate = ajv.compile(THREAD_SCHEMA);
  * @param {object} record
  * @returns {{ valid: boolean, errors: string[] }}
  */
+const CONFIDENCE = new Set(["high", "low", "unknown"]);
+
+/**
+ * Make a thread record match THREAD_SCHEMA.
+ * Real Forge exports used confidence "medium" and stored context.files as path strings.
+ * @param {object} record
+ */
+export function conformThreadRecord(record) {
+  if (!record || typeof record !== "object") return record;
+  if (record.meta && typeof record.meta === "object") {
+    const confidence = record.meta.recognition_confidence;
+    if (confidence != null && !CONFIDENCE.has(confidence)) {
+      record.meta.recognition_confidence = "low";
+    }
+    if (record.meta.tokens != null) {
+      const n = Number(record.meta.tokens);
+      record.meta.tokens = Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
+    }
+  }
+  if (record.context && typeof record.context === "object") {
+    if (Array.isArray(record.context.files)) {
+      record.context.files = record.context.files.map((file) => {
+        if (typeof file === "string") return { path: file };
+        if (file && typeof file === "object") return file;
+        return { path: String(file ?? "") };
+      });
+    }
+    if (Array.isArray(record.context.diffs)) {
+      record.context.diffs = record.context.diffs.map((diff) => {
+        if (typeof diff === "string") return { patch: diff };
+        if (diff && typeof diff === "object") return diff;
+        return { patch: String(diff ?? "") };
+      });
+    }
+  }
+  if (Array.isArray(record.messages)) {
+    for (const message of record.messages) {
+      if (!message || typeof message !== "object") continue;
+      if (message.content != null && typeof message.content !== "string") {
+        message.content = JSON.stringify(message.content);
+      }
+      if (message.timestamp == null) {
+        delete message.timestamp;
+      } else if (typeof message.timestamp === "number") {
+        const ms = message.timestamp < 1e12 ? message.timestamp * 1000 : message.timestamp;
+        const date = new Date(ms);
+        message.timestamp = Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+        if (message.timestamp == null) delete message.timestamp;
+      } else if (typeof message.timestamp !== "string") {
+        message.timestamp = String(message.timestamp);
+      }
+    }
+  }
+  return record;
+}
+
 export function validateThread(record) {
   const valid = validate(record);
   if (valid) return { valid: true, errors: [] };

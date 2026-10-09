@@ -1,0 +1,31 @@
+{
+  "sessions": [
+    {
+      "sessionId": "s1",
+      "messages": [
+        { "role": "user", "content": "first session question" },
+        { "role": "assistant", "content": "first session answer" }
+      ]
+    },
+    {
+      "sessionId": "s2",
+      "trace_id": "trace-s2",
+      "messages": [
+        { "role": "user", "content": "second session question" },
+        {
+          "role": "assistant",
+          "content": [
+            { "type": "text", "text": "calling a tool" },
+            { "type": "tool_use", "name": "grep", "input": { "pattern": "session" } }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            { "type": "tool_result", "name": "grep", "content": "found session" }
+          ]
+        }
+      ]
+    }
+  ]
+}

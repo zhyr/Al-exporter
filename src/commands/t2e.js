@@ -24,7 +24,7 @@ Usage:
   ai-exporter t2e <subcommand> [options]
 
 Subcommands:
-  pipeline  运行完整流水线（扫描→挖掘→门控→构建→验证→校准→导出）
+  pipeline  读取已导出备份，再挖掘→门控→构建→验证→校准→导出
   mine      仅挖掘 episodes + 证据排序 + 门控（不做构建/验证）
   status    查看管线统计与状态分布
   list     列出 episodes（可按 --status/--source 过滤）

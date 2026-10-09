@@ -417,7 +417,10 @@ function eventsToRecord(events, { projectId, traceId, filePath, turnAnchor }) {
     thread_id: threadId,
     type: "thread",
     messages,
-    context: { files: turnAnchor?.files || [], diffs: [] },
+    context: {
+      files: (turnAnchor?.files || []).map((file) => (typeof file === "string" ? { path: file } : file)),
+      diffs: [],
+    },
     meta: {
       source: "forge",
       project: projectId || "unknown",
@@ -428,9 +431,7 @@ function eventsToRecord(events, { projectId, traceId, filePath, turnAnchor }) {
       prompt: (messages.find((m) => m.role === "user")?.content || "").slice(0, 120),
       recognition_confidence: messages.some((m) => m.role === "assistant" && (m.tool_calls || []).length)
         ? "high"
-        : messages.length > 2
-          ? "medium"
-          : "low",
+        : "low",
       forge_trace_id: traceId,
       forge_event_count: events.length,
       forge_turn_outcome: turnOutcome,

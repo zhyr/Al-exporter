@@ -9,6 +9,8 @@ const PII_PATTERNS = [
   { type: "Email", regex: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g },
 ];
 
+export { PII_PATTERNS };
+
 async function getAllFiles(dir) {
   const files = [];
   try {

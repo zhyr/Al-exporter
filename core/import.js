@@ -6,6 +6,7 @@
 import os from "os";
 import path from "path";
 import crypto from "crypto";
+import log from "../src/logger.js";
 
 const HOME = os.homedir();
 
@@ -134,7 +135,7 @@ export async function importToAgent(records, source) {
       results.paths.push(filePath);
     } catch (err) {
       results.failed++;
-      console.error(`Failed to write ${filePath}:`, err.message);
+      log.error(`Failed to write ${filePath}: ${err.message}`);
     }
   }
 

@@ -4,7 +4,7 @@
  *
  * 端点：
  *   GET  /api/t2e/status                      管线状态统计
- *   POST /api/t2e/pipeline                    运行完整流水线（扫描→...→导出）
+ *   POST /api/t2e/pipeline                    读取已导出备份并跑挖掘到导出
  *   POST /api/t2e/mine                        仅挖掘+证据+门控
  *   GET  /api/t2e/episodes                    列出 episodes（分页/状态过滤）
  *   GET  /api/t2e/episodes/:id                单 episode 详情
@@ -21,12 +21,17 @@
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import log from '../logger.js';
 import {
   runPipeline, runMineAndGate, store,
   manualGate, addAnnotation, listAnnotations,
   buildTask, verifyTask, calibrateTask, exportDatasets,
   STATE_MACHINE, EVAL_ENUMS,
 } from '../../core/t2e/index.js';
+import { scanAllToolsIncremental } from '../../core/scan.js';
+import { normalizeAll } from '../../core/normalize.js';
+import { collectAllVscdbRecords } from '../../core/cursor_sqlite.js';
+import { conformThreadRecord } from '../../core/schema-validator.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUTPUT_DIR = path.resolve(__dirname, '../../agent-backup');
@@ -260,17 +265,16 @@ export async function handleT2ERoute(method, pathname, url, req, res, respond) {
 
 async function runPipelineAsync(jobId, body) {
   try {
-    console.log(`[t2e] ${jobId}: pipeline started`);
+    log.info(`[t2e] ${jobId}: pipeline started`);
     // 优先使用已备份的归一化 records；否则执行扫描
     const dataDir = body.dataDir || OUTPUT_DIR;
     let records;
     if (body.useBackup !== false) {
       records = await loadRecordsFromBackup(dataDir);
     } else {
-      const { scanAllToolsIncremental } = await import('../../core/scan.js');
-      const { normalizeAll } = await import('../../core/normalize.js');
       const files = await scanAllToolsIncremental({ workers: body.workers || 8 });
-      records = normalizeAll(files);
+      const sqliteRecords = await collectAllVscdbRecords();
+      records = dedupeByThreadId([...normalizeAll(files), ...sqliteRecords]);
     }
     const result = await runPipeline({
       normalized: records,
@@ -278,11 +282,11 @@ async function runPipelineAsync(jobId, body) {
       docker: body.docker,
       outDir: body.outDir || path.join(T2E_DATASETS_DIR, `export-${Date.now()}`),
       split: body.split || 'candidate_generated',
-      onProgress: (stage, detail) => console.log(`[t2e] ${jobId}: ${stage} — ${detail}`),
+      onProgress: (stage, detail) => log.debug(`[t2e] ${jobId}: ${stage} — ${detail}`),
     });
-    console.log(`[t2e] ${jobId}: done`, JSON.stringify(result.stats));
+    log.info(`[t2e] ${jobId}: done`, { stats: result.stats });
   } catch (err) {
-    console.error(`[t2e] ${jobId}: FAILED`, err);
+    log.error(`[t2e] ${jobId}: FAILED`, { error: err.message });
   }
 }
 
@@ -294,13 +298,29 @@ async function mineAsync(jobId, body) {
       normalized: records,
       thresholds: body.thresholds,
     });
-    console.log(`[t2e] ${jobId}: mined=${result.mined}`, JSON.stringify({ accepted: result.accepted.length, review: result.review.length, rejected: result.rejected.length }));
+    log.info(`[t2e] ${jobId}: mined=${result.mined}`, {
+      accepted: result.accepted.length,
+      review: result.review.length,
+      rejected: result.rejected.length,
+    });
   } catch (err) {
-    console.error(`[t2e] ${jobId}: FAILED`, err);
+    log.error(`[t2e] ${jobId}: FAILED`, { error: err.message });
   }
 }
 
 // ─── 工具 ─────────────────────────────────────────────────────────────────────
+
+function dedupeByThreadId(records) {
+  const seen = new Set();
+  const out = [];
+  for (const record of records) {
+    const id = record?.thread_id;
+    if (id && seen.has(id)) continue;
+    if (id) seen.add(id);
+    out.push(record);
+  }
+  return out;
+}
 
 function readBody(req) {
   return new Promise((resolve) => {
@@ -332,7 +352,7 @@ export async function loadRecordsFromBackup(dataDir) {
     for (const f of files) {
       try {
         const record = JSON.parse(readFileSync(path.join(subPath, f), 'utf8'));
-        if (record && record.thread_id) records.push(record);
+        if (record && record.thread_id) records.push(conformThreadRecord(record));
       } catch { /* skip invalid */ }
     }
   }

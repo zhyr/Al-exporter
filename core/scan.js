@@ -3,7 +3,8 @@ import path from "path";
 import fs from "fs-extra";
 import { glob } from "glob";
 import pLimit from "p-limit";
-import { isInterestingFile, safeReadHeader, detectByMagic } from "./utils.js";
+import { isInterestingFile, safeReadHeader, detectByMagic, ideScanRelativeDirs } from "./utils.js";
+import log from "../src/logger.js";
 
 const HOME = os.homedir();
 
@@ -56,52 +57,8 @@ const PATH_PATTERNS = [
   "Library/Application Support/Qoder/User/workspaceStorage",
   "Library/Application Support/Qoder/User/globalStorage",
 
-  // CodeBuddy
-  ".codebuddy",
-  ".config/codebuddy",
-  "Library/Application Support/CodeBuddy/User/History",
-  "Library/Application Support/CodeBuddy/User/workspaceStorage",
-  "Library/Application Support/CodeBuddy/User/globalStorage",
-  "Library/Application Support/CodeBuddy CN/User/History",
-  "Library/Application Support/CodeBuddy CN/User/workspaceStorage",
-  "Library/Application Support/CodeBuddy CN/User/globalStorage",
-
-  // WorkBuddy (Tencent work line / workbuddy.ai)
-  ".workbuddy",
-  ".config/workbuddy",
-  "Library/Application Support/WorkBuddy/User/History",
-  "Library/Application Support/WorkBuddy/User/workspaceStorage",
-  "Library/Application Support/WorkBuddy/User/globalStorage",
-  "Library/Application Support/WorkBuddy CN/User/History",
-  "Library/Application Support/WorkBuddy CN/User/workspaceStorage",
-  "Library/Application Support/WorkBuddy CN/User/globalStorage",
-
-  // ZCode (Zhipu Z.ai Agent IDE)
-  ".zcode",
-  ".config/zcode",
-  "Library/Application Support/ZCode/User/History",
-  "Library/Application Support/ZCode/User/workspaceStorage",
-  "Library/Application Support/ZCode/User/globalStorage",
-
-  // Trae family: Trae (intl) / Trae CN / Trae Work / Trae Work CN
-  ".trae",
-  ".trae-work",
-  ".config/trae",
-  ".config/Trae/User/workspaceStorage",
-  ".config/Trae Work/User/workspaceStorage",
-  ".config/Trae Work CN/User/workspaceStorage",
-  "Library/Application Support/Trae/User/History",
-  "Library/Application Support/Trae/User/workspaceStorage",
-  "Library/Application Support/Trae/User/globalStorage",
-  "Library/Application Support/Trae CN/User/History",
-  "Library/Application Support/Trae CN/User/workspaceStorage",
-  "Library/Application Support/Trae CN/User/globalStorage",
-  "Library/Application Support/Trae Work/User/History",
-  "Library/Application Support/Trae Work/User/workspaceStorage",
-  "Library/Application Support/Trae Work/User/globalStorage",
-  "Library/Application Support/Trae Work CN/User/History",
-  "Library/Application Support/Trae Work CN/User/workspaceStorage",
-  "Library/Application Support/Trae Work CN/User/globalStorage",
+  // CodeBuddy / WorkBuddy / ZCode / Trae family — shared with vscdb discovery
+  ...ideScanRelativeDirs(),
 
   // Augment
   ".augment",
@@ -239,7 +196,7 @@ const GLOB_IGNORE = [
 const DEEP_SCAN_PATTERNS = [
   ".cursor", ".claude", ".antigravity", ".gemini", ".augment",
   ".kiro", ".codex", ".opencode", ".qoder", ".codebuddy", ".workbuddy",
-  ".trae", ".trae-work", ".zcode", ".windsurf", ".iflow", ".continue", ".deepseek",
+  ".trae", ".trae-work", ".traework", ".zcode", ".windsurf", ".iflow", ".continue", ".deepseek",
   ".tongyi", ".devin", ".replit", ".Forge-agents", ".forge-e2e-works", ".forge/works"
 ];
 
@@ -292,7 +249,7 @@ async function scanAtDepth(fullRoot, depth, seenPaths) {
     }
     return paths;
   } catch (err) {
-    console.warn(`[scan] Skipping ${fullRoot}: ${err.message}`);
+    log.warn(`Skipping ${fullRoot}: ${err.message}`);
     return [];
   }
 }

@@ -2,7 +2,7 @@
 
 > 一键扫描、备份、导出 AI 编码工具对话数据，支持 26+ 主流 Agent，数据可转换为 Markdown/JSON/训练格式，赋能 AI 训练与跨工具迁移。
 
-**Version 2.2.0** · MIT License
+**Version 2.2.1** · MIT License
 
 [中文](#中文)  | [English](#english)
 
@@ -39,13 +39,14 @@ AI Exporter 是一款强大的 AI 编码工具对话数据扫描、备份、导�
 | Antigravity | `.antigravity/` | ✅ |
 | Cline | `.cline/` | ✅ |
 | Windsurf | `.windsurf/` | ✅ |
-| CodeBuddy | `.codebuddy/` | ✅ |
-| WorkBuddy（腾讯） | `.workbuddy/`、`Application Support/WorkBuddy*` | ✅ |
-| ZCode（智谱 Z.ai） | `.zcode/`、`Application Support/ZCode*` | ✅ |
+| CodeBuddy / CodeBuddy CN | `.codebuddy/`、`Application Support/CodeBuddy*` | 目录已覆盖；通用 chat / tool / log（未经官方安装包核对） |
+| WorkBuddy / WorkBuddy CN（腾讯） | `.workbuddy/`、`Application Support/WorkBuddy*` | 目录已覆盖；通用 chat / tool / log（未经官方安装包核对） |
+| ZCode（智谱 Z.ai） | `.zcode/`、`Application Support/ZCode*` | 目录已覆盖；通用 chat / tool / log（未经官方安装包核对） |
 | Kiro | `.kiro/` | ✅ |
 | iFlow | `.iflow/` | ✅ |
 | Qoder | `.qoder/` | ✅ |
-| Trae（含 Trae CN / Trae Work / Trae Work CN） | `.trae/`、`Trae*` 系列数据目录 | ✅ |
+| Trae / Trae CN | `.trae/`、`Application Support/Trae*` | 来源 `trae`。目录已覆盖；通用 chat / tool / log（未经官方安装包核对） |
+| Trae Work / Trae Work CN | `.trae-work/`、`.traework/`、`Application Support/Trae Work*` | 来源 `traework`。目录已覆盖；通用 chat / tool / log（未经官方安装包核对） |
 | Augment | `.augment/` | ✅ |
 | Zed | `.zed/` | ✅ |
 | Aider | `.aider/` | ✅ |
@@ -212,15 +213,23 @@ node src/cli.js t2e export --format all --split candidate_generated
 默认只扫描 HOME 下的已知目录。若工具使用了自定义数据目录（如 `CODEX_HOME`、便携版安装），打开 Web 界面的「设置 → 额外扫描目录」，把会话目录逐行填入后重新「增量扫描」。该目录支持 `~` 展开，可指向任意绝对路径。
 
 **Q：Trae / Trae CN / Trae Work / Trae Work CN 都支持吗？**
-支持。扫描默认覆盖 `.trae/`、`Library/Application Support/Trae*`、`.config/Trae*` 等全部变体目录。若你的 Trae 安装在非默认位置，同样通过「额外扫描目录」加入。
+目录发现覆盖 `.trae/`、`.trae-work/`、`.traework/`、`Application Support/Trae*`、`.config/Trae*`（含 Windows `%APPDATA%` 与 Linux XDG）。Trae / Trae CN 的来源是 `trae`，Trae Work / Trae Work CN 的来源是 `traework`。会话、工具调用和运行日志按通用 chat / tool / log 解析，尚未用官方安装包逐字段核对。非默认位置用「额外扫描目录」加入。
 
-**Q：WorkBuddy / ZCode 等新工具支持吗？**
-支持。WorkBuddy（腾讯）与 ZCode（智谱 Z.ai）已内置默认数据目录扫描与来源识别；与 Cursor 等 VSCode 系工具相同，会话会经 `*.vscdb` 通道自动提取。若安装在非默认数据目录，用「设置 → 额外扫描目录」指向即可，无需改代码。
+**Q：WorkBuddy / ZCode / CodeBuddy 等新工具支持吗？**
+默认数据目录和来源识别已覆盖（含 CN 变体，以及 macOS / Linux / Windows）。VS Code 系的 `*.vscdb` 仍用现有键读取；JSON / JSONL 里的 session、chat、tool use 和运行日志走通用解析。这不是各产品私有格式的完整证明。非默认目录用「设置 → 额外扫描目录」。
 
 **Q：扫描完成但没有数据载入？**
 依次排查：① 确认目标工具确实产生过会话记录；② 会话是否在「额外扫描目录」之外的位置；③ 查看扫描日志中「Found N candidate files」是否非零；④ 若文件格式不支持，可先通过「导入」添加。
 
 ### 更新日志
+
+#### v2.2.1
+
+- 同一文件里带明确 `sessionId` / `session_id` / `trace_id` 的会话会拆成多条 thread；工具调用写入 `message.meta.kind`（`tool_use` / `tool_result`），工具结果上的 `name` 会计入 T2E 证据。
+- 运行日志归一为 `type: log`，不进入评估挖掘。路径在 log/run 下、行首带时间戳的 WorkBuddy 启动记录（`_type: mark|summary`）按阶段和 `epochMs` 保留。
+- Trae Work / Trae Work CN 的来源是 `traework`（与 `trae` 分开）。CodeBuddy、WorkBuddy、ZCode、Trae 的目录发现覆盖 macOS、Linux 与 Windows；JSON / JSONL 仍走通用解析，尚未对照官方安装包逐字段核对。
+- 导出前把真实数据里见到的非法形状对齐到 schema（`recognition_confidence: medium`、字符串形式的 `context.files`）。`t2e pipeline` 读取已导出备份，不在这一步重新扫描磁盘。带用户轮次的 `agent` 记录可以进入挖掘。
+- 诊断脚本要求传入真实导出目录，不再生成假会话。本版本不执行脚本、不回放工具链，也不把运行日志重跑成任务。
 
 #### v2.2.0
 
@@ -283,13 +292,14 @@ One-click tool to scan, backup, and export AI coding assistant conversations. Su
 | Antigravity | `.antigravity/` | ✅ |
 | Cline | `.cline/` | ✅ |
 | Windsurf | `.windsurf/` | ✅ |
-| CodeBuddy | `.codebuddy/` | ✅ |
-| WorkBuddy (Tencent) | `.workbuddy/`, `Application Support/WorkBuddy*` | ✅ |
-| ZCode (Zhipu Z.ai) | `.zcode/`, `Application Support/ZCode*` | ✅ |
+| CodeBuddy / CodeBuddy CN | `.codebuddy/`, `Application Support/CodeBuddy*` | Dirs covered; generic chat / tool / log (not verified against an official install) |
+| WorkBuddy / WorkBuddy CN (Tencent) | `.workbuddy/`, `Application Support/WorkBuddy*` | Dirs covered; generic chat / tool / log (not verified against an official install) |
+| ZCode (Zhipu Z.ai) | `.zcode/`, `Application Support/ZCode*` | Dirs covered; generic chat / tool / log (not verified against an official install) |
 | Kiro | `.kiro/` | ✅ |
 | iFlow | `.iflow/` | ✅ |
 | Qoder | `.qoder/` | ✅ |
-| Trae (incl. Trae CN / Trae Work / Trae Work CN) | `.trae/`, `Trae*` data dirs | ✅ |
+| Trae / Trae CN | `.trae/`, `Application Support/Trae*` | Source `trae`. Dirs covered; generic chat / tool / log (not verified against an official install) |
+| Trae Work / Trae Work CN | `.trae-work/`, `.traework/`, `Application Support/Trae Work*` | Source `traework`. Dirs covered; generic chat / tool / log (not verified against an official install) |
 | Augment | `.augment/` | ✅ |
 | Zed | `.zed/` | ✅ |
 | Aider | `.aider/` | ✅ |
@@ -451,15 +461,23 @@ node src/cli.js t2e export --format all --split candidate_generated
 Only well-known directories under HOME are scanned by default. If a tool uses a custom data dir (e.g. `CODEX_HOME`, portable installs), open **Settings → Extra scan directories** in the web UI and list the session directory line by line, then run an incremental scan again. `~` expansion and any absolute path are supported.
 
 **Q: Is Trae / Trae CN / Trae Work / Trae Work CN supported?**
-Yes. Scanning covers all variants: `.trae/`, `Library/Application Support/Trae*`, `.config/Trae*`, etc. If your Trae lives elsewhere, add it via **Extra scan directories**.
+Directory discovery covers `.trae/`, `.trae-work/`, `.traework/`, `Application Support/Trae*`, `.config/Trae*` (including Windows `%APPDATA%` and Linux XDG). Trae / Trae CN map to source `trae`; Trae Work / Trae Work CN map to `traework`. Sessions, tool calls, and runtime logs use the generic chat / tool / log parser and have not been checked field-by-field against an official install. Add non-default locations via **Extra scan directories**.
 
-**Q: Are newer tools like WorkBuddy / ZCode supported?**
-Yes. WorkBuddy (Tencent) and ZCode (Zhipu Z.ai) ship with built-in default data-dir scanning and source detection; like Cursor and other VS Code-family tools, their sessions are extracted through the `*.vscdb` channel. If they are installed in a non-default data dir, point **Settings → Extra scan directories** at it — no code changes needed.
+**Q: Are newer tools like WorkBuddy / ZCode / CodeBuddy supported?**
+Default data directories and source detection are covered (including CN variants, on macOS / Linux / Windows). VS Code-family `*.vscdb` files are still read with the existing keys. Session, chat, tool use, and runtime logs in JSON / JSONL use the generic parser. That is not a complete proof of each product's private format. Point **Settings → Extra scan directories** at a non-default directory.
 
 **Q: Scan completes but no data is loaded?**
 Check in order: ① make sure the tool actually produced sessions; ② whether sessions live outside any scanned directory; ③ whether the scan log shows a non-zero "Found N candidate files"; ④ if the file format is unsupported, try **Import** instead.
 
 ### Changelog
+
+#### v2.2.1
+
+- A file with explicit `sessionId` / `session_id` / `trace_id` values splits into separate threads. Tool calls are stored as `message.meta.kind` (`tool_use` / `tool_result`), and a tool result's `name` counts as T2E evidence.
+- Runtime logs normalize to `type: log` and stay out of eval mining. WorkBuddy startup lines under a log/run path that begin with a timestamp (`_type: mark|summary`) keep the phase and `epochMs`.
+- Trae Work / Trae Work CN use source `traework`, separate from `trae`. CodeBuddy, WorkBuddy, ZCode, and Trae directory discovery covers macOS, Linux, and Windows. JSON / JSONL still uses the generic parser and has not been checked field-by-field against an official install.
+- Export conforms shapes seen in real data before write (`recognition_confidence: medium`, string `context.files`). `t2e pipeline` reads an existing backup and does not scan disk in that step. `agent` records that contain a user turn can be mined.
+- Diagnostic scripts require a real export directory and no longer synthesize sessions. This release does not execute scripts, replay tool chains, or turn runtime logs into tasks.
 
 #### v2.2.0
 

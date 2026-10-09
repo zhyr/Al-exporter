@@ -7,6 +7,8 @@ const SECRET_PATTERNS = [
   { type: "JWT_Token", regex: /ey[a-zA-Z0-9_-]{10,}\.ey[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/g },
 ];
 
+export { SECRET_PATTERNS };
+
 async function getAllFiles(dir) {
   const files = [];
   try {

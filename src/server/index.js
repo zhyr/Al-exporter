@@ -898,14 +898,32 @@ function respond(res, status, body) {
   res.end(payload);
 }
 
+// Maximum request body size (50 MB) — DoS guard for loopback server
+const MAX_BODY_BYTES = 50 * 1024 * 1024;
+
 async function readBody(req) {
-  return new Promise((resolve) => {
-    let data = "";
-    req.on("data", (c) => (data += c));
+  return new Promise((resolve, reject) => {
+    let bytes = 0;
+    let aborted = false;
+    const chunks = [];
+    req.on("data", (c) => {
+      if (aborted) return;
+      bytes += c.length;
+      if (bytes > MAX_BODY_BYTES) {
+        aborted = true;
+        const err = new Error("Request body too large");
+        err.statusCode = 413;
+        reject(err);
+        return;
+      }
+      chunks.push(c);
+    });
     req.on("end", () => {
-      try { resolve(JSON.parse(data || "{}")); }
+      if (aborted) return;
+      try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf-8") || "{}")); }
       catch { resolve({}); }
     });
+    req.on("error", reject);
   });
 }
 
@@ -985,7 +1003,7 @@ export function startServer({ host = "127.0.0.1", port = 8080 } = {}) {
     const server = http.createServer((req, res) => {
       route(req, res).catch((err) => {
         log.error("Unhandled request error", { error: err.message });
-        if (!res.headersSent) respond(res, 500, { error: "Internal server error" });
+        if (!res.headersSent) respond(res, err.statusCode || 500, { error: err.statusCode ? err.message : "Internal server error" });
       });
     });
 

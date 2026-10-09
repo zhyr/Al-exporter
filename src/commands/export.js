@@ -10,7 +10,47 @@ import { scanAllTools } from "../../core/scan.js";
 import { normalizeAll, SCHEMA_VERSION } from "../../core/normalize.js";
 import { collectAllVscdbRecords } from "../../core/cursor_sqlite.js";
 import { EXPORTER_VERSION } from "../../core/version.js";
+import { conformThreadRecord } from "../../core/schema-validator.js";
+import { DESENSITIZE_PATTERNS } from "../../core/plugins/desensitize.js";
+import { SECRET_PATTERNS } from "../../core/plugins/secrets.js";
+import { PII_PATTERNS } from "../../core/plugins/privacy.js";
 import log from "../logger.js";
+
+// Combined redaction patterns (API keys + passwords/JWT + PII). In-memory only.
+const REDACT_PATTERNS = [
+  ...DESENSITIZE_PATTERNS,
+  ...SECRET_PATTERNS,
+  ...PII_PATTERNS,
+];
+
+/**
+ * Redact secrets / PII in a single record in place. Returns match counts by type.
+ * Operates on meta.prompt, meta.file_path, and every message.content string.
+ */
+function redactRecord(record) {
+  const matches = {};
+  const scan = (text) => {
+    if (typeof text !== "string") return text;
+    let out = text;
+    for (const { type, regex } of REDACT_PATTERNS) {
+      out = out.replace(regex, () => {
+        matches[type] = (matches[type] || 0) + 1;
+        return "***REDACTED***";
+      });
+    }
+    return out;
+  };
+  if (record.meta) {
+    if (record.meta.prompt) record.meta.prompt = scan(record.meta.prompt);
+    if (record.meta.file_path) record.meta.file_path = scan(record.meta.file_path);
+  }
+  if (Array.isArray(record.messages)) {
+    for (const m of record.messages) {
+      if (m && typeof m.content === "string") m.content = scan(m.content);
+    }
+  }
+  return matches;
+}
 
 function threadHash(record) {
   return crypto.createHash("sha1").update(JSON.stringify(record)).digest("hex").slice(0, 12);
@@ -29,6 +69,7 @@ function slugify(str = "") {
  * @param {string}   [opts.format="json"]  "json","markdown","training-jsonl"
  * @param {string}   [opts.since]          ISO8601 — only export records after this date
  * @param {number}   [opts.workers=8]
+ * @param {boolean}  [opts.redact=false]   Redact secrets/API keys/PII before writing
  * @param {Function} [opts.onProgress]
  */
 export async function runExport(opts = {}) {
@@ -37,6 +78,7 @@ export async function runExport(opts = {}) {
     format = "json",
     since = null,
     workers = 8,
+    redact = false,
     onProgress = null,
   } = opts;
 
@@ -77,6 +119,26 @@ export async function runExport(opts = {}) {
     log.info(`After --since filter: ${allRecords.length} records`);
   }
 
+  // ── Redact (optional) ──────────────────────────────────────────────────────
+  let redactedCount = 0;
+  const redactMatches = {};
+  if (redact) {
+    progress(65, 100, "Redacting secrets & PII…");
+    for (const r of allRecords) {
+      const m = redactRecord(r);
+      const n = Object.values(m).reduce((a, b) => a + b, 0);
+      if (n > 0) {
+        redactedCount++;
+        for (const [k, v] of Object.entries(m)) redactMatches[k] = (redactMatches[k] || 0) + v;
+      }
+    }
+    if (redactedCount > 0) {
+      log.warn(`Redacted sensitive data in ${redactedCount} record(s): ${JSON.stringify(redactMatches)}`);
+    } else {
+      log.info("Redaction scan complete — no secrets or PII detected.");
+    }
+  }
+
   // ── Write ─────────────────────────────────────────────────────────────────
   progress(70, 100, "Writing output…");
   await fs.ensureDir(output);
@@ -86,6 +148,7 @@ export async function runExport(opts = {}) {
   let newCount = 0, skippedCount = 0;
 
   for (const record of allRecords) {
+    conformThreadRecord(record);
     const hash = threadHash(record);
     const source = record.meta?.source || "unknown";
     sourcesSeen.add(source);
@@ -125,5 +188,5 @@ export async function runExport(opts = {}) {
 
   progress(100, 100, "Done");
   log.info(`Export complete — new: ${newCount}, skipped: ${skippedCount}`);
-  return { output, new_items: newCount, skipped_items: skippedCount, total: allRecords.length, sources_seen: [...sourcesSeen].sort(), manifest_path: manifestPath };
+  return { output, new_items: newCount, skipped_items: skippedCount, total: allRecords.length, sources_seen: [...sourcesSeen].sort(), manifest_path: manifestPath, redacted: redactedCount };
 }
