@@ -31,6 +31,7 @@ import {
 import { scanAllToolsIncremental } from '../../core/scan.js';
 import { normalizeAll } from '../../core/normalize.js';
 import { collectAllVscdbRecords } from '../../core/cursor_sqlite.js';
+import { collectCursorCliRecords } from '../../core/cursor_cli.js';
 import { conformThreadRecord } from '../../core/schema-validator.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -274,7 +275,8 @@ async function runPipelineAsync(jobId, body) {
     } else {
       const files = await scanAllToolsIncremental({ workers: body.workers || 8 });
       const sqliteRecords = await collectAllVscdbRecords();
-      records = dedupeByThreadId([...normalizeAll(files), ...sqliteRecords]);
+      const cursorCliRecords = collectCursorCliRecords();
+      records = dedupeByThreadId([...normalizeAll(files), ...sqliteRecords, ...cursorCliRecords]);
     }
     const result = await runPipeline({
       normalized: records,

@@ -9,8 +9,16 @@ import crypto from "node:crypto";
 import { scanAllTools } from "../../core/scan.js";
 import { normalizeAll, SCHEMA_VERSION } from "../../core/normalize.js";
 import { collectAllVscdbRecords } from "../../core/cursor_sqlite.js";
+import { collectCursorCliRecords } from "../../core/cursor_cli.js";
 import { EXPORTER_VERSION } from "../../core/version.js";
 import { conformThreadRecord } from "../../core/schema-validator.js";
+import {
+  exportStatePath,
+  loadExportState,
+  saveExportState,
+  shouldSkipSourceFile,
+  rememberSourceFile,
+} from "../../core/export-state.js";
 import { DESENSITIZE_PATTERNS } from "../../core/plugins/desensitize.js";
 import { SECRET_PATTERNS } from "../../core/plugins/secrets.js";
 import { PII_PATTERNS } from "../../core/plugins/privacy.js";
@@ -98,17 +106,43 @@ export async function runExport(opts = {}) {
 
   // ── Scan ──────────────────────────────────────────────────────────────────
   progress(5, 100, "Scanning file-based sources…");
-  const rawFiles = await scanAllTools({ workers, onProgress: (d, t, p) => progress(Math.round((d / Math.max(t, 1)) * 30) + 5, 100, `Scanning ${path.basename(p)}`) });
-  log.info(`Found ${rawFiles.length} candidate files`);
+  const scannedFiles = await scanAllTools({ workers, onProgress: (d, t, p) => progress(Math.round((d / Math.max(t, 1)) * 30) + 5, 100, `Scanning ${path.basename(p)}`) });
+  log.info(`Found ${scannedFiles.length} candidate files`);
+
+  const stateFile = exportStatePath(output);
+  const exportState = loadExportState(stateFile);
+  const rawFiles = [];
+  const carriedManifestItems = [];
+  let stateSkippedFiles = 0;
+  for (const f of scannedFiles) {
+    if (shouldSkipSourceFile(exportState, f.path, f.mtime, output)) {
+      stateSkippedFiles++;
+      const entry = exportState.files?.[f.path];
+      for (const rel of entry?.outputs || []) {
+        const prevItem = prevManifest?.items?.find((i) => i.file === rel);
+        if (prevItem) carriedManifestItems.push(prevItem);
+        else carriedManifestItems.push({ source: "unknown", thread_id: "", file: rel, hash: `state:${rel}` });
+      }
+      continue;
+    }
+    rawFiles.push(f);
+  }
+  if (stateSkippedFiles > 0) {
+    log.info(`Export state skipped ${stateSkippedFiles} unchanged source file(s)`);
+  }
 
   progress(40, 100, "Scanning IDE workspace databases (*.vscdb)…");
   const sqliteRecords = await collectAllVscdbRecords();
   log.info(`SQLite (all IDEs): ${sqliteRecords.length} records`);
 
+  progress(50, 100, "Scanning Cursor CLI chats (store.db)…");
+  const cursorCliRecords = collectCursorCliRecords();
+  log.info(`Cursor CLI: ${cursorCliRecords.length} records`);
+
   // ── Normalize ─────────────────────────────────────────────────────────────
   progress(60, 100, "Normalizing records…");
   const fileRecords = normalizeAll(rawFiles);
-  let allRecords = [...fileRecords, ...sqliteRecords];
+  let allRecords = [...fileRecords, ...sqliteRecords, ...cursorCliRecords];
 
   // Apply --since filter
   if (sinceCutoff) {
@@ -143,19 +177,33 @@ export async function runExport(opts = {}) {
   progress(70, 100, "Writing output…");
   await fs.ensureDir(output);
   const exportedAt = new Date().toISOString();
-  const manifestItems = [];
-  const sourcesSeen = new Set();
+  const manifestItems = [...carriedManifestItems];
+  const sourcesSeen = new Set(carriedManifestItems.map((i) => i.source).filter(Boolean));
   let newCount = 0, skippedCount = 0;
+  /** @type {Map<string, { mtime_ms: number, thread_ids: string[], outputs: string[] }>} */
+  const writtenBySource = new Map();
 
   for (const record of allRecords) {
     conformThreadRecord(record);
     const hash = threadHash(record);
     const source = record.meta?.source || "unknown";
     sourcesSeen.add(source);
+    const srcPath = record.meta?.file_path || "";
+    const srcMtime = record.meta?.updated_at
+      ? new Date(record.meta.updated_at).getTime()
+      : 0;
 
     if (prevHashes.has(hash)) {
       skippedCount++;
-      manifestItems.push({ hash, source, thread_id: record.thread_id });
+      const relExisting = prevManifest?.items?.find((i) => i.hash === hash)?.file;
+      manifestItems.push({ hash, source, thread_id: record.thread_id, ...(relExisting ? { file: relExisting } : {}) });
+      if (srcPath && relExisting) {
+        const prev = writtenBySource.get(srcPath) || { mtime_ms: srcMtime, thread_ids: [], outputs: [] };
+        prev.mtime_ms = srcMtime || prev.mtime_ms;
+        prev.thread_ids.push(record.thread_id);
+        prev.outputs.push(relExisting);
+        writtenBySource.set(srcPath, prev);
+      }
       continue;
     }
 
@@ -168,9 +216,22 @@ export async function runExport(opts = {}) {
 
     const fileContent = await fs.readFile(filePath);
     const sha256 = crypto.createHash("sha256").update(fileContent).digest("hex");
-    manifestItems.push({ hash, sha256, source, thread_id: record.thread_id, file: path.relative(output, filePath) });
+    const rel = path.relative(output, filePath);
+    manifestItems.push({ hash, sha256, source, thread_id: record.thread_id, file: rel });
     newCount++;
+    if (srcPath) {
+      const prev = writtenBySource.get(srcPath) || { mtime_ms: srcMtime, thread_ids: [], outputs: [] };
+      prev.mtime_ms = srcMtime || prev.mtime_ms;
+      prev.thread_ids.push(record.thread_id);
+      prev.outputs.push(rel);
+      writtenBySource.set(srcPath, prev);
+    }
   }
+
+  for (const [srcPath, entry] of writtenBySource) {
+    rememberSourceFile(exportState, srcPath, entry);
+  }
+  saveExportState(exportState, stateFile);
 
   // ── Manifest ──────────────────────────────────────────────────────────────
   progress(95, 100, "Writing manifest…");
@@ -179,14 +240,24 @@ export async function runExport(opts = {}) {
     schema_version: SCHEMA_VERSION,
     exported_at: exportedAt,
     sources_seen: [...sourcesSeen].sort(),
-    total_items: allRecords.length,
+    total_items: allRecords.length + stateSkippedFiles,
     new_items: newCount,
     skipped_items: skippedCount,
+    state_skipped_files: stateSkippedFiles,
     items: manifestItems,
   };
   await fs.writeJson(manifestPath, manifest, { spaces: 2 });
 
   progress(100, 100, "Done");
-  log.info(`Export complete — new: ${newCount}, skipped: ${skippedCount}`);
-  return { output, new_items: newCount, skipped_items: skippedCount, total: allRecords.length, sources_seen: [...sourcesSeen].sort(), manifest_path: manifestPath, redacted: redactedCount };
+  log.info(`Export complete — new: ${newCount}, skipped: ${skippedCount}, state_skipped_files: ${stateSkippedFiles}`);
+  return {
+    output,
+    new_items: newCount,
+    skipped_items: skippedCount,
+    state_skipped_files: stateSkippedFiles,
+    total: allRecords.length,
+    sources_seen: [...sourcesSeen].sort(),
+    manifest_path: manifestPath,
+    redacted: redactedCount,
+  };
 }

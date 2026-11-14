@@ -2,7 +2,7 @@
 
 > 一键扫描、备份、导出 AI 编码工具对话数据，支持 26+ 主流 Agent，数据可转换为 Markdown/JSON/训练格式，赋能 AI 训练与跨工具迁移。
 
-**Version 2.2.1** · MIT License
+**Version 2.2.2** · MIT License
 
 [中文](#中文)  | [English](#english)
 
@@ -40,7 +40,8 @@ AI Exporter 是一款强大的 AI 编码工具对话数据扫描、备份、导�
 | Cline | `.cline/` | ✅ |
 | Windsurf | `.windsurf/` | ✅ |
 | CodeBuddy / CodeBuddy CN | `.codebuddy/`、`Application Support/CodeBuddy*` | 目录已覆盖；通用 chat / tool / log（未经官方安装包核对） |
-| WorkBuddy / WorkBuddy CN（腾讯） | `.workbuddy/`、`Application Support/WorkBuddy*` | 目录已覆盖；通用 chat / tool / log（未经官方安装包核对） |
+| WorkBuddy / WorkBuddy CN（腾讯） | `.workbuddy/`、`.workbuddy-ai/`、`Application Support/WorkBuddy*` | 专用会话解析：`projects/<cwd>/<uuid>.jsonl` + `workbuddy.db`；剥 `<system-reminder>` / 取 `<user_query>`；保留 tool 调用 |
+| Cursor CLI（`cursor agent`） | `~/.cursor/chats/*/*/store.db` | 来源 `cursor_cli`（与 IDE Cursor 分开）；从 blobs 启发式提取 `<user_query>` 文本 |
 | ZCode（智谱 Z.ai） | `.zcode/`、`Application Support/ZCode*` | 目录已覆盖；通用 chat / tool / log（未经官方安装包核对） |
 | Kiro | `.kiro/` | ✅ |
 | iFlow | `.iflow/` | ✅ |
@@ -223,6 +224,13 @@ node src/cli.js t2e export --format all --split candidate_generated
 
 ### 更新日志
 
+#### v2.2.2
+
+- WorkBuddy 专用会话解析：`projects/<cwd>/<uuid>.jsonl` + `workbuddy.db`（含 `.workbuddy-ai`）；清洗 `<user_query>` / `<system-reminder>`，工具调用仍保留。
+- 导出增加按源文件 mtime 的 `.export_state.json` 增量游标；Claude Code 本地截断信号写入 `meta.extra.transcript_truncated`（不联网）。
+- 新增来源 `cursor_cli`（`~/.cursor/chats` store.db 启发式提取）；T2E 不再把 `tool_result` 当成新的用户轮次。
+- 测试与 fixture 仅使用合成路径（如 `/Users/demo`）；真实 `agent-backup` / `.env` 不进入仓库。
+
 #### v2.2.1
 
 - 同一文件里带明确 `sessionId` / `session_id` / `trace_id` 的会话会拆成多条 thread；工具调用写入 `message.meta.kind`（`tool_use` / `tool_result`），工具结果上的 `name` 会计入 T2E 证据。
@@ -293,7 +301,8 @@ One-click tool to scan, backup, and export AI coding assistant conversations. Su
 | Cline | `.cline/` | ✅ |
 | Windsurf | `.windsurf/` | ✅ |
 | CodeBuddy / CodeBuddy CN | `.codebuddy/`, `Application Support/CodeBuddy*` | Dirs covered; generic chat / tool / log (not verified against an official install) |
-| WorkBuddy / WorkBuddy CN (Tencent) | `.workbuddy/`, `Application Support/WorkBuddy*` | Dirs covered; generic chat / tool / log (not verified against an official install) |
+| WorkBuddy / WorkBuddy CN (Tencent) | `.workbuddy/`, `.workbuddy-ai/`, `Application Support/WorkBuddy*` | Dedicated parse: `projects/<cwd>/<uuid>.jsonl` + `workbuddy.db`; strip `<system-reminder>` / keep `<user_query>`; tool calls retained |
+| Cursor CLI (`cursor agent`) | `~/.cursor/chats/*/*/store.db` | Source `cursor_cli` (separate from IDE Cursor); heuristic `<user_query>` extraction from blobs |
 | ZCode (Zhipu Z.ai) | `.zcode/`, `Application Support/ZCode*` | Dirs covered; generic chat / tool / log (not verified against an official install) |
 | Kiro | `.kiro/` | ✅ |
 | iFlow | `.iflow/` | ✅ |
@@ -470,6 +479,13 @@ Default data directories and source detection are covered (including CN variants
 Check in order: ① make sure the tool actually produced sessions; ② whether sessions live outside any scanned directory; ③ whether the scan log shows a non-zero "Found N candidate files"; ④ if the file format is unsupported, try **Import** instead.
 
 ### Changelog
+
+#### v2.2.2
+
+- WorkBuddy dedicated session parse: `projects/<cwd>/<uuid>.jsonl` + `workbuddy.db` (including `.workbuddy-ai`); clean `<user_query>` / `<system-reminder>`; tool calls retained.
+- Export gains a per-source-file `.export_state.json` mtime cursor; Claude Code local truncation signals land in `meta.extra.transcript_truncated` (offline only).
+- New source `cursor_cli` (`~/.cursor/chats` store.db heuristic extract); T2E no longer treats `tool_result` as a new user turn.
+- Tests/fixtures use synthetic paths only (e.g. `/Users/demo`); real `agent-backup` / `.env` stay out of the repo.
 
 #### v2.2.1
 

@@ -1,5 +1,6 @@
 import path from "path";
 import crypto from "crypto";
+import os from "os";
 import { detectTool } from "./utils.js";
 import {
   expandMessage,
@@ -8,12 +9,42 @@ import {
   runtimeMessagesFromText,
   pathLooksLikeRuntimeLog,
 } from "./content.js";
+import {
+  pathLooksLikeWorkBuddySession,
+  parseWorkBuddyJsonl,
+  loadWorkBuddyMeta,
+  workbuddyDefaultRoots,
+} from "./workbuddy.js";
+import {
+  pathLooksLikeClaudeTranscript,
+  detectClaudeTruncation,
+} from "./claude_integrity.js";
+
+let _workbuddyMetaCache = undefined;
+function getWorkBuddyMetaCached() {
+  if (_workbuddyMetaCache !== undefined) return _workbuddyMetaCache;
+  const { dbPaths } = workbuddyDefaultRoots(os.homedir());
+  for (const dbPath of dbPaths) {
+    const meta = loadWorkBuddyMeta(dbPath);
+    if (meta) {
+      _workbuddyMetaCache = meta;
+      return meta;
+    }
+  }
+  _workbuddyMetaCache = null;
+  return null;
+}
+
+/** Test helper: reset WorkBuddy DB cache between cases. */
+export function resetWorkBuddyMetaCache() {
+  _workbuddyMetaCache = undefined;
+}
 
 export const SCHEMA_VERSION = "1.0.0";
 
 // Allowed meta.source values per §6.1
 export const ALLOWED_SOURCES = new Set([
-  "cursor", "antigravity", "codex", "augment", "claude_code",
+  "cursor", "cursor_cli", "antigravity", "codex", "augment", "claude_code",
   "iflow", "trae", "codebuddy", "qoder", "windsurf",
   "vscode_copilot", "imported", "api_capture", "unknown", "other",
   // Common local tooling IDs seen in paths / exports (kept explicit for UI + stats)
@@ -91,11 +122,13 @@ function makeId(filePath) {
 
 function normalizeItem(item) {
   let type = identifyType(item.path);
-  const toolSource = normalizeMetaSource(detectTool(item.path));
+  let toolSource = normalizeMetaSource(detectTool(item.path));
   const ext = path.extname(item.path).toLowerCase();
 
   const extracted = extractContent(item.content, item.path, ext);
   if (extracted.runtimeLog) type = "log";
+  if (extracted.deleted) return [];
+  if (extracted.forceSource) toolSource = normalizeMetaSource(extracted.forceSource);
 
   const groups = extracted.sessions?.length
     ? extracted.sessions
@@ -122,7 +155,7 @@ function normalizeItem(item) {
         type, toolSource, item, messages: [{ role: "system", content: item.content }],
         context: { files: [], diffs: [] }, prompt: path.basename(item.path),
         tokens, confidence: "low", warnings: healthWarnings, sessionId: group.id,
-        runtimeLog: false,
+        runtimeLog: false, extraFields: extracted.extraFields,
       }));
       continue;
     }
@@ -145,13 +178,14 @@ function normalizeItem(item) {
       warnings: healthWarnings,
       sessionId: group.id,
       runtimeLog: Boolean(extracted.runtimeLog),
+      extraFields: extracted.extraFields,
     }));
   }
   return records;
 }
 
-function buildRecord({ type, toolSource, item, messages, context, prompt, tokens, confidence, warnings, sessionId, runtimeLog }) {
-  const extra = {};
+function buildRecord({ type, toolSource, item, messages, context, prompt, tokens, confidence, warnings, sessionId, runtimeLog, extraFields }) {
+  const extra = { ...(extraFields || {}) };
   if (sessionId) extra.session_id = sessionId;
   if (runtimeLog) extra.kind = "runtime_log";
   const record = {
@@ -204,6 +238,22 @@ function estimateTokens(text = "") {
 function extractContent(content, filePath, ext) {
   const empty = { messages: [], context: { files: [], diffs: [] }, prompt: null, confidence: "unknown", warnings: [] };
   if (!content) return empty;
+
+  if (pathLooksLikeWorkBuddySession(filePath) && ext === ".jsonl") {
+    const wb = parseWorkBuddyJsonl(content, filePath, getWorkBuddyMetaCached());
+    if (wb) {
+      return {
+        ...wb,
+        forceSource: "workbuddy",
+        extraFields: {
+          ...(wb.title ? { title: wb.title } : {}),
+          ...(wb.projectDirectory ? { project_directory: wb.projectDirectory } : {}),
+          kind: "workbuddy_session",
+        },
+      };
+    }
+  }
+
   let result;
   if (ext === ".md" || ext === ".mdc" || ext === ".cursorrules") result = extractFromMarkdown(content);
   else if (ext === ".jsonl") result = extractFromJsonl(content);
@@ -212,6 +262,22 @@ function extractContent(content, filePath, ext) {
     const jsonResult = extractFromJson(content);
     result = (jsonResult.messages.length > 0 || jsonResult.sessions?.length) ? jsonResult : extractFromMarkdown(content);
   }
+
+  if (pathLooksLikeClaudeTranscript(filePath) && ext === ".jsonl") {
+    const integrity = detectClaudeTruncation(content);
+    if (integrity.signals.length) {
+      result.warnings = [...(result.warnings || []), ...integrity.warnings];
+      result.extraFields = {
+        ...(result.extraFields || {}),
+        transcript_truncated: true,
+        truncation_signals: integrity.signals,
+        ...(integrity.earliest_known_activity
+          ? { earliest_known_activity: integrity.earliest_known_activity }
+          : {}),
+      };
+    }
+  }
+
   const chat = (result.messages || []).some((m) => m.role === "user" || m.role === "assistant")
     || (result.sessions || []).length > 0;
   if (!chat && pathLooksLikeRuntimeLog(filePath)) {
@@ -291,8 +357,8 @@ function extractFromJsonl(content) {
       const parsed = JSON.parse(line);
       lineSession = parsed.sessionId || parsed.session_id || parsed.trace_id || null;
       
-      // iFlow session format: { uuid, sessionId, type, message: { role, content } }
-      if (parsed.sessionId && parsed.type && parsed.message && parsed.message?.role) {
+      // iFlow / Claude Code event: { sessionId?, type, message: { role, content }, uuid? }
+      if (parsed.message?.role && (parsed.sessionId || parsed.uuid || parsed.type === "user" || parsed.type === "assistant")) {
         for (const m of expandMessage({ ...parsed.message, timestamp: parsed.message.timestamp || parsed.timestamp })) {
           messages.push(m);
         }

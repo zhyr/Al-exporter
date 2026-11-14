@@ -132,7 +132,9 @@ export function splitByUserTurn(messages, { minPromptLength = 8, maxMessagesPerE
   let currentHasUser = false;
 
   for (const m of messages) {
-    const isUser = m.role === 'user';
+    // tool_result is stored as role=user for schema compatibility; it must not open a new episode.
+    const isToolPayload = m?.meta?.kind === 'tool_result' || m?.meta?.kind === 'tool_use';
+    const isUser = m.role === 'user' && !isToolPayload;
     const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content || '');
 
     if (isUser && isContinuation(content, minPromptLength)) {
@@ -195,7 +197,7 @@ function isContinuation(content, minPromptLength) {
 }
 
 function firstUserContent(segment) {
-  const user = segment.find((m) => m.role === 'user');
+  const user = segment.find((m) => m.role === 'user' && m?.meta?.kind !== 'tool_result' && m?.meta?.kind !== 'tool_use');
   if (!user) return null;
   return typeof user.content === 'string' ? user.content : JSON.stringify(user.content || '');
 }

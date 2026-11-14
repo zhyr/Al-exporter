@@ -1,0 +1,6 @@
+{"type":"session-meta","id":"meta1","sessionId":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","timestamp":1700000000000,"meta":{}}
+{"type":"message","id":"m1","timestamp":1700000001000,"type":"message","role":"user","content":[{"type":"input_text","text":"<system-reminder data-role=\"user-context\">\n<user_info>\nOS Version: darwin\n</user_info>\n</system-reminder>\n<user_query>\n请对这只股票做深度基本面分析\n</user_query>"}],"sessionId":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","cwd":"/Users/demo/proj"}
+{"type":"ai-title","id":"t1","timestamp":1700000001500,"aiTitle":"个股分析","sessionId":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"}
+{"type":"function_call","id":"fc1","timestamp":1700000002000,"name":"search","arguments":"{\"q\":\"股票\"}","sessionId":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"}
+{"type":"function_call_result","id":"fr1","timestamp":1700000002500,"name":"search","output":"found 3 docs","sessionId":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"}
+{"type":"message","id":"m2","timestamp":1700000003000,"role":"assistant","content":[{"type":"output_text","text":"这是一份简要分析。"}],"providerData":{"model":"deepseek-v4.1-flash"},"sessionId":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","cwd":"/Users/demo/proj"}

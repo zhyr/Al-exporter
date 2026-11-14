@@ -83,6 +83,9 @@ const TOOL_RULES = [
   // Must come before generic "code" checks
   ["roo-cline", "cline"],
   ["cline", "cline"],
+  // Cursor CLI chats before generic Cursor IDE
+  [".cursor/chats", "cursor_cli"],
+  ["cursor/chats", "cursor_cli"],
   // Cursor before vscode (Cursor IS vscode-based)
   ["cursor", "cursor"],
   ["composer", "cursor"],
@@ -157,7 +160,9 @@ const IDE_DOT_DIRS = [
   ".codebuddy",
   ".config/codebuddy",
   ".workbuddy",
+  ".workbuddy-ai",
   ".config/workbuddy",
+  ".config/workbuddy-ai",
   ".zcode",
   ".config/zcode",
   ".trae",
@@ -167,6 +172,7 @@ const IDE_DOT_DIRS = [
   ".config/Trae/User/workspaceStorage",
   ".config/Trae Work/User/workspaceStorage",
   ".config/Trae Work CN/User/workspaceStorage",
+  ".cursor/chats",
 ];
 
 /** Products whose default data dir we scan for chat / session / log files. */

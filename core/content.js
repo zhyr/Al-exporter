@@ -4,6 +4,33 @@
  * Content stays a string so the thread schema does not change shape.
  */
 
+const SYSTEM_REMINDER_RE = /<system-reminder\b[^>]*>[\s\S]*?<\/system-reminder>/gi;
+const USER_QUERY_RE = /<user_query>([\s\S]*?)<\/user_query>/gi;
+
+/**
+ * Strip injected agent wrappers from user text.
+ * Prefer `<user_query>` bodies; drop leftover system-reminder / unclosed wrappers.
+ * Tool messages are not passed through this helper.
+ * @param {string} text
+ * @returns {string}
+ */
+export function cleanInjectedUserText(text) {
+  if (typeof text !== "string" || !text) return "";
+  let raw = text.replace(SYSTEM_REMINDER_RE, "");
+  const queries = [];
+  for (const m of raw.matchAll(USER_QUERY_RE)) {
+    const q = (m[1] || "").trim();
+    if (q) queries.push(q);
+  }
+  if (queries.length) return queries.join("\n").trim();
+  raw = raw.trim();
+  if (!raw) return "";
+  if (/<system-reminder\b/i.test(raw) || /^<(?:user_info|environment_context)\b/i.test(raw)) {
+    return "";
+  }
+  return raw;
+}
+
 /**
  * @param {unknown} value
  * @returns {string}
@@ -119,10 +146,15 @@ export function expandMessage(m) {
   const role = mapChatRole(m.role || (m.type === "ai" ? "assistant" : m.type === "user" || m.type === "human" ? "user" : ""));
   const stamp = stampOf(m);
   if (Array.isArray(m.content)) {
-    const expanded = expandBlocks(m.content, role, stamp);
+    const expanded = expandBlocks(m.content, role, stamp).map((msg) => {
+      if (msg.role !== "user" || msg.meta?.kind) return msg;
+      const cleaned = cleanInjectedUserText(msg.content);
+      return cleaned === msg.content ? msg : { ...msg, content: cleaned };
+    });
     return expanded.length ? expanded : [{ role, content: "", ...stamp }];
   }
-  const content = contentToString(m.content ?? m.text ?? m.rawText ?? "");
+  let content = contentToString(m.content ?? m.text ?? m.rawText ?? "");
+  if (role === "user") content = cleanInjectedUserText(content);
   const msg = { role, content, ...stamp };
   if (m.model) msg.model = m.model;
   return [msg];

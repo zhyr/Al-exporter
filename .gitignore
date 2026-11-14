@@ -22,10 +22,18 @@ docs/
 *.log
 viewer/data.js
 AI-Exporter2Eval梳理和对齐.md
+.export_state.json
+**/.export_state.json
+.cursor/
 
 # Test coverage
 coverage/
 
 # Environment
 .env
-.env.local
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+secrets.json
