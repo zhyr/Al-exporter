@@ -142,8 +142,10 @@ export function parseWorkBuddyJsonl(content, filePath, meta = null) {
   let aiTitle = "";
   let cwd = "";
   let firstUser = "";
+  let lineNo = 0;
 
   for (const line of String(content || "").split("\n")) {
+    lineNo += 1;
     if (!line.trim()) continue;
     let item;
     try {
@@ -155,6 +157,10 @@ export function parseWorkBuddyJsonl(content, filePath, meta = null) {
     if (!item || typeof item !== "object") continue;
     if (item.cwd) cwd = String(item.cwd);
     const stamp = stampMs(item.timestamp);
+    const identity = {
+      ...(item.id != null ? { id: String(item.id), id_source: "event.id" } : {}),
+      line: lineNo,
+    };
 
     if (item.type === "ai-title") {
       aiTitle = String(item.aiTitle || "").trim() || aiTitle;
@@ -168,7 +174,14 @@ export function parseWorkBuddyJsonl(content, filePath, meta = null) {
         role: "assistant",
         content: `[Tool Use] ${name}${argText ? `\n${argText}` : ""}`,
         ...stamp,
+        ...identity,
         meta: { kind: "tool_use", name: String(name) },
+        tool_call: {
+          name: String(name),
+          status: typeof item.status === "string" && item.status.trim() ? item.status.trim() : null,
+          call_id: item.callId != null ? String(item.callId) : null,
+          phase: "call",
+        },
         ...(modelOf(item) ? { model: modelOf(item) } : {}),
       });
       continue;
@@ -181,7 +194,14 @@ export function parseWorkBuddyJsonl(content, filePath, meta = null) {
         role: "user",
         content: `[Tool Result] ${body}`,
         ...stamp,
+        ...identity,
         meta: { kind: "tool_result", ...(item.name ? { name: String(item.name) } : {}) },
+        tool_call: {
+          name: item.name != null ? String(item.name) : null,
+          status: typeof item.status === "string" && item.status.trim() ? item.status.trim() : null,
+          call_id: item.callId != null ? String(item.callId) : null,
+          phase: "result",
+        },
       });
       continue;
     }
@@ -191,7 +211,7 @@ export function parseWorkBuddyJsonl(content, filePath, meta = null) {
       const text = userTextFromParts(item.content);
       if (!text) continue;
       if (!firstUser) firstUser = text;
-      messages.push({ role: "user", content: text, ...stamp });
+      messages.push({ role: "user", content: text, ...stamp, ...identity });
       continue;
     }
     if (item.role === "assistant") {
@@ -202,6 +222,7 @@ export function parseWorkBuddyJsonl(content, filePath, meta = null) {
         role: "assistant",
         content: text,
         ...stamp,
+        ...identity,
         ...(model ? { model } : {}),
       });
     }
@@ -227,5 +248,11 @@ export function parseWorkBuddyJsonl(content, filePath, meta = null) {
     sessions: [{ id: sessionId, messages }],
     title,
     projectDirectory: cwd,
+    sessionMeta: {
+      native_id: sessionId,
+      native_id_kind: "uuid",
+      native_id_source: "file.basename",
+      ...(cwd ? { cwd, cwd_source: "workbuddy.record" } : {}),
+    },
   };
 }

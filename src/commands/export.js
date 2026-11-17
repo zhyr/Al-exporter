@@ -22,6 +22,14 @@ import {
 import { DESENSITIZE_PATTERNS } from "../../core/plugins/desensitize.js";
 import { SECRET_PATTERNS } from "../../core/plugins/secrets.js";
 import { PII_PATTERNS } from "../../core/plugins/privacy.js";
+import {
+  INTEROP_CONTRACT,
+  INTEROP_CONTRACT_VERSION,
+  INTEROP_FILENAME,
+  computeInteropCapabilities,
+  finalizeRecordInterop,
+  resolveDeviceIdentity,
+} from "../../core/interop.js";
 import log from "../logger.js";
 
 // Combined redaction patterns (API keys + passwords/JWT + PII). In-memory only.
@@ -78,6 +86,7 @@ function slugify(str = "") {
  * @param {string}   [opts.since]          ISO8601 — only export records after this date
  * @param {number}   [opts.workers=8]
  * @param {boolean}  [opts.redact=false]   Redact secrets/API keys/PII before writing
+ * @param {string}   [opts.sourceDevice]   Device id of the machine that owns the agent records
  * @param {Function} [opts.onProgress]
  */
 export async function runExport(opts = {}) {
@@ -87,8 +96,11 @@ export async function runExport(opts = {}) {
     since = null,
     workers = 8,
     redact = false,
+    sourceDevice = null,
     onProgress = null,
   } = opts;
+
+  const devices = resolveDeviceIdentity({ sourceDevice });
 
   const progress = (p, t, msg) => {
     if (onProgress) onProgress(p, t, msg);
@@ -111,6 +123,12 @@ export async function runExport(opts = {}) {
 
   const stateFile = exportStatePath(output);
   const exportState = loadExportState(stateFile);
+  // A schema bump adds fields that unchanged source files still need to gain.
+  if (exportState.schema_version !== SCHEMA_VERSION && Object.keys(exportState.files).length > 0) {
+    log.info(`Export state schema ${exportState.schema_version || "legacy"} → ${SCHEMA_VERSION}: re-exporting all source files`);
+    exportState.files = {};
+  }
+  exportState.schema_version = SCHEMA_VERSION;
   const rawFiles = [];
   const carriedManifestItems = [];
   let stateSkippedFiles = 0;
@@ -153,6 +171,35 @@ export async function runExport(opts = {}) {
     log.info(`After --since filter: ${allRecords.length} records`);
   }
 
+  // ── Interop contract (schema 1.1.0) ────────────────────────────────────────
+  // Fill session/device/message identity fields before hashing so the written
+  // record and its content hash both reflect the contract.
+  for (const record of allRecords) {
+    finalizeRecordInterop(record, { devices });
+  }
+
+  const exportedAt = new Date().toISOString();
+  const interop = computeInteropCapabilities(allRecords, {
+    generatedAt: exportedAt,
+    exporterVersion: EXPORTER_VERSION,
+    schemaVersion: SCHEMA_VERSION,
+    devices,
+    stateSkippedFiles,
+  });
+
+  if (allRecords.length === 0) {
+    // Incremental re-export may write nothing; keep the last capability report
+    // instead of replacing it with an empty one.
+    const prevInterop = await fs.readJson(path.join(output, INTEROP_FILENAME)).catch(() => null);
+    if (prevInterop) {
+      prevInterop.generated_at = exportedAt;
+      prevInterop.state_skipped_files = stateSkippedFiles;
+      prevInterop.carried_forward = true;
+      Object.keys(interop).forEach((key) => delete interop[key]);
+      Object.assign(interop, prevInterop);
+    }
+  }
+
   // ── Redact (optional) ──────────────────────────────────────────────────────
   let redactedCount = 0;
   const redactMatches = {};
@@ -176,7 +223,6 @@ export async function runExport(opts = {}) {
   // ── Write ─────────────────────────────────────────────────────────────────
   progress(70, 100, "Writing output…");
   await fs.ensureDir(output);
-  const exportedAt = new Date().toISOString();
   const manifestItems = [...carriedManifestItems];
   const sourcesSeen = new Set(carriedManifestItems.map((i) => i.source).filter(Boolean));
   let newCount = 0, skippedCount = 0;
@@ -233,12 +279,31 @@ export async function runExport(opts = {}) {
   }
   saveExportState(exportState, stateFile);
 
+  // ── Interop capability report ─────────────────────────────────────────────
+  progress(93, 100, "Writing interop capabilities…");
+  const interopPath = path.join(output, INTEROP_FILENAME);
+  const interopBody = `${JSON.stringify(interop, null, 2)}\n`;
+  await fs.writeFile(interopPath, interopBody);
+  const interopSha256 = crypto.createHash("sha256").update(interopBody).digest("hex");
+
   // ── Manifest ──────────────────────────────────────────────────────────────
   progress(95, 100, "Writing manifest…");
   const manifest = {
     exporter_version: EXPORTER_VERSION,
     schema_version: SCHEMA_VERSION,
+    contract: {
+      name: INTEROP_CONTRACT,
+      version: INTEROP_CONTRACT_VERSION,
+      schema_version: SCHEMA_VERSION,
+      capabilities: INTEROP_FILENAME,
+      capabilities_sha256: interopSha256,
+    },
     exported_at: exportedAt,
+    device: {
+      source_device_id: devices.source_device_id,
+      source_device_id_basis: devices.source_device_id_basis,
+      collector_device_id: devices.collector_device_id,
+    },
     sources_seen: [...sourcesSeen].sort(),
     total_items: allRecords.length + stateSkippedFiles,
     new_items: newCount,
@@ -258,6 +323,8 @@ export async function runExport(opts = {}) {
     total: allRecords.length,
     sources_seen: [...sourcesSeen].sort(),
     manifest_path: manifestPath,
+    interop_path: interopPath,
+    capabilities: interop.capabilities,
     redacted: redactedCount,
   };
 }

@@ -19,6 +19,11 @@ import {
   pathLooksLikeClaudeTranscript,
   detectClaudeTruncation,
 } from "./claude_integrity.js";
+import {
+  buildSessionBlock,
+  mergeSessionBlock,
+  toolStatus,
+} from "./interop.js";
 
 let _workbuddyMetaCache = undefined;
 function getWorkBuddyMetaCached() {
@@ -40,7 +45,7 @@ export function resetWorkBuddyMetaCache() {
   _workbuddyMetaCache = undefined;
 }
 
-export const SCHEMA_VERSION = "1.0.0";
+export const SCHEMA_VERSION = "1.1.0";
 
 // Allowed meta.source values per §6.1
 export const ALLOWED_SOURCES = new Set([
@@ -120,10 +125,17 @@ function makeId(filePath) {
   return crypto.createHash("sha1").update(filePath).digest("hex").slice(0, 16);
 }
 
+/** Cursor stores each agent conversation as agent-transcripts/<uuid>/<uuid>.jsonl. */
+export function pathLooksLikeCursorAgentTranscript(filePath) {
+  const p = String(filePath || "").replace(/\\/g, "/");
+  return p.includes("/agent-transcripts/") && p.endsWith(".jsonl");
+}
+
 function normalizeItem(item) {
   let type = identifyType(item.path);
   let toolSource = normalizeMetaSource(detectTool(item.path));
   const ext = path.extname(item.path).toLowerCase();
+  if (pathLooksLikeCursorAgentTranscript(item.path)) type = "thread";
 
   const extracted = extractContent(item.content, item.path, ext);
   if (extracted.runtimeLog) type = "log";
@@ -132,7 +144,7 @@ function normalizeItem(item) {
 
   const groups = extracted.sessions?.length
     ? extracted.sessions
-    : [{ id: null, messages: extracted.messages || [] }];
+    : [{ id: extracted.sessionMeta?.native_id || null, messages: extracted.messages || [], sessionMeta: extracted.sessionMeta }];
 
   const records = [];
   for (const group of groups) {
@@ -147,6 +159,10 @@ function normalizeItem(item) {
     }).length;
     if (emptyContent > 0) healthWarnings.push(`${emptyContent} message(s) have empty content`);
     const messages = rawMessages.filter((m) => typeof m.content === "string" && m.content.trim() !== "");
+    const sessionMeta = mergeSessionBlock(
+      buildSessionBlock(extracted.sessionMeta || {}),
+      group.sessionMeta || {},
+    );
 
     // Config/rule with no chat: keep the file body. Chat-shaped files with nothing to keep are dropped.
     if (messages.length === 0 && !["thread", "plan", "task", "walkthrough", "artifact", "log"].includes(type)) {
@@ -155,7 +171,7 @@ function normalizeItem(item) {
         type, toolSource, item, messages: [{ role: "system", content: item.content }],
         context: { files: [], diffs: [] }, prompt: path.basename(item.path),
         tokens, confidence: "low", warnings: healthWarnings, sessionId: group.id,
-        runtimeLog: false, extraFields: extracted.extraFields,
+        runtimeLog: false, extraFields: extracted.extraFields, sessionMeta,
       }));
       continue;
     }
@@ -179,19 +195,29 @@ function normalizeItem(item) {
       sessionId: group.id,
       runtimeLog: Boolean(extracted.runtimeLog),
       extraFields: extracted.extraFields,
+      sessionMeta,
     }));
   }
   return records;
 }
 
-function buildRecord({ type, toolSource, item, messages, context, prompt, tokens, confidence, warnings, sessionId, runtimeLog, extraFields }) {
+function buildRecord({ type, toolSource, item, messages, context, prompt, tokens, confidence, warnings, sessionId, runtimeLog, extraFields, sessionMeta }) {
   const extra = { ...(extraFields || {}) };
   if (sessionId) extra.session_id = sessionId;
   if (runtimeLog) extra.kind = "runtime_log";
+  let session = mergeSessionBlock(buildSessionBlock(sessionMeta || {}), {});
+  if (!session.native_id && sessionId) {
+    session = mergeSessionBlock(session, {
+      native_id: sessionId,
+      native_id_kind: "native",
+      native_id_source: "record.session_id",
+    });
+  }
   const record = {
     schema_version: SCHEMA_VERSION,
     thread_id: sessionId ? makeId(`${item.path}\0${sessionId}`) : makeId(item.path),
     type,
+    session,
     messages,
     context: {
       files: context?.files || [],
@@ -250,12 +276,15 @@ function extractContent(content, filePath, ext) {
           ...(wb.projectDirectory ? { project_directory: wb.projectDirectory } : {}),
           kind: "workbuddy_session",
         },
+        sessionMeta: wb.sessionMeta,
       };
     }
   }
 
   let result;
-  if (ext === ".md" || ext === ".mdc" || ext === ".cursorrules") result = extractFromMarkdown(content);
+  if (pathLooksLikeCursorAgentTranscript(filePath) && ext === ".jsonl") {
+    result = extractFromCursorTranscript(content, filePath);
+  } else if (ext === ".md" || ext === ".mdc" || ext === ".cursorrules") result = extractFromMarkdown(content);
   else if (ext === ".jsonl") result = extractFromJsonl(content);
   else if (ext === ".json" || ext === ".db" || ext === "" || ext === ".log") result = extractFromJson(content);
   else {
@@ -348,21 +377,65 @@ function extractFromJsonl(content) {
   const messages = [];
   const context = { files: [], diffs: [] };
   const warnings = [];
+  const rootMeta = {};
 
+  let lineNo = 0;
   for (const line of content.split("\n")) {
+    lineNo += 1;
     if (!line.trim()) continue;
     const before = messages.length;
     let lineSession = null;
+    let lineMsgId = null;
+    const applyLineMeta = () => {
+      for (let i = before; i < messages.length; i++) {
+        const m = messages[i];
+        m._sessionId = lineSession || null;
+        m._line = lineNo;
+        if (lineMsgId && !m.id) {
+          const offset = i - before;
+          m.id = offset === 0 ? String(lineMsgId) : `${lineMsgId}#${offset}`;
+          m.id_source = offset === 0 ? "line" : "line+block";
+        }
+        if (!m.tool_call && m.meta?.kind === "tool_use") {
+          m.tool_call = { name: m.meta.name || null, status: null, call_id: null, phase: "call" };
+        } else if (!m.tool_call && m.meta?.kind === "tool_result") {
+          m.tool_call = { name: m.meta.name || null, status: null, call_id: null, phase: "result" };
+        }
+      }
+    };
     try {
       const parsed = JSON.parse(line);
       lineSession = parsed.sessionId || parsed.session_id || parsed.trace_id || null;
-      
+      lineMsgId = parsed.uuid ?? parsed.id ?? null;
+
+      if (lineSession && !rootMeta.native_id) {
+        rootMeta.native_id = String(lineSession);
+        rootMeta.native_id_kind = "native";
+        rootMeta.native_id_source = "line.sessionId";
+      }
+      if (!rootMeta.cwd && typeof parsed.cwd === "string" && parsed.cwd.trim()) {
+        rootMeta.cwd = parsed.cwd.trim();
+        rootMeta.cwd_source = "line.cwd";
+      }
+      if (!rootMeta.agent_version && (parsed.version || parsed.cli_version)) {
+        rootMeta.agent_version = String(parsed.version || parsed.cli_version);
+      }
+      const lineRemote = parsed.gitRemoteUrl || parsed.git?.repository_url || parsed.repository_url;
+      if (!rootMeta.git_remote && typeof lineRemote === "string" && lineRemote.trim()) {
+        rootMeta.git_remote = lineRemote.trim();
+        rootMeta.git_remote_source = "source_record";
+      }
+
       // iFlow / Claude Code event: { sessionId?, type, message: { role, content }, uuid? }
       if (parsed.message?.role && (parsed.sessionId || parsed.uuid || parsed.type === "user" || parsed.type === "assistant")) {
-        for (const m of expandMessage({ ...parsed.message, timestamp: parsed.message.timestamp || parsed.timestamp })) {
+        for (const m of expandMessage({
+          ...parsed.message,
+          timestamp: parsed.message.timestamp || parsed.timestamp,
+          ...(parsed.uuid ? { uuid: parsed.uuid } : {}),
+        })) {
           messages.push(m);
         }
-        for (let i = before; i < messages.length; i++) messages[i]._sessionId = lineSession || null;
+        applyLineMeta();
         continue;
       }
       
@@ -376,8 +449,8 @@ function extractFromJsonl(content) {
         // SFT format
         if (parsed.instruction) messages.push({ role: "user", content: parsed.instruction + (parsed.input ? `\n${parsed.input}` : "") });
         if (parsed.output) messages.push({ role: "assistant", content: parsed.output });
-      } else if (parsed.type === "response_item" && parsed.payload?.content) {
-        // Codex rollout format: { type: "response_item", payload: { type: "message", role: "user"/"assistant", content: [...] } }
+      } else if (parsed.type === "response_item" && parsed.payload) {
+        // Codex rollout format: { type: "response_item", payload: { type, role, content, call_id } }
         const payload = parsed.payload;
         if (payload.type === "message" && payload.content) {
           const textContent = Array.isArray(payload.content) 
@@ -390,6 +463,37 @@ function extractFromJsonl(content) {
               ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {})
             });
           }
+        } else if (["function_call", "custom_tool_call", "local_shell_call"].includes(payload.type)) {
+          const toolName = payload.name || payload.tool || payload.action || payload.type;
+          const args = payload.arguments ?? payload.input ?? payload.action ?? "";
+          const argText = typeof args === "string" ? args : JSON.stringify(args);
+          messages.push({
+            role: "assistant",
+            content: `[Tool Use] ${toolName}${argText ? `\n${argText}` : ""}`,
+            ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {}),
+            meta: { kind: "tool_use", name: toolName },
+            tool_call: {
+              name: toolName,
+              status: toolStatus(payload.status),
+              call_id: payload.call_id ?? payload.id ?? null,
+              phase: "call",
+            },
+          });
+        } else if (["function_call_output", "custom_tool_call_output", "local_shell_call_output"].includes(payload.type)) {
+          const output = payload.output ?? "";
+          const outputStr = typeof output === "string" ? output : JSON.stringify(output);
+          messages.push({
+            role: "user",
+            content: `[Tool Result] ${outputStr}`,
+            ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {}),
+            meta: { kind: "tool_result" },
+            tool_call: {
+              name: payload.name ?? null,
+              status: toolStatus(payload.status) ?? (payload.is_error === true ? "error" : null),
+              call_id: payload.call_id ?? payload.id ?? null,
+              phase: "result",
+            },
+          });
         }
       } else if (parsed.type === "function_call") {
         // Codex function call: { type: "function_call", name, arguments: "..." }
@@ -399,6 +503,12 @@ function extractFromJsonl(content) {
             content: `[Function Call] ${parsed.name}(${parsed.arguments})`,
             ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {}),
             meta: { kind: "tool_use", name: parsed.name },
+            tool_call: {
+              name: parsed.name,
+              status: toolStatus(parsed.status),
+              call_id: parsed.call_id ?? parsed.id ?? null,
+              phase: "call",
+            },
           });
         }
       } else if (parsed.type === "function_call_output") {
@@ -409,6 +519,12 @@ function extractFromJsonl(content) {
             content: `[Function Output] ${parsed.output}`,
             ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {}),
             meta: { kind: "tool_result", ...(parsed.name ? { name: parsed.name } : {}) },
+            tool_call: {
+              name: parsed.name ?? null,
+              status: toolStatus(parsed.status) ?? (parsed.is_error === true ? "error" : null),
+              call_id: parsed.call_id ?? parsed.id ?? null,
+              phase: "result",
+            },
           });
         }
       } else if (parsed.type === "custom_tool_call") {
@@ -417,7 +533,14 @@ function extractFromJsonl(content) {
           messages.push({
             role: "assistant",
             content: `[Tool Call] ${parsed.name}`,
-            ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {})
+            ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {}),
+            meta: { kind: "tool_use", name: parsed.name },
+            tool_call: {
+              name: parsed.name,
+              status: toolStatus(parsed.status),
+              call_id: parsed.call_id ?? parsed.id ?? null,
+              phase: "call",
+            },
           });
         }
       } else if (parsed.type === "custom_tool_call_output") {
@@ -426,7 +549,14 @@ function extractFromJsonl(content) {
           messages.push({
             role: "user",
             content: `[Tool Output] ${parsed.output}`,
-            ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {})
+            ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {}),
+            meta: { kind: "tool_result", ...(parsed.name ? { name: parsed.name } : {}) },
+            tool_call: {
+              name: parsed.name ?? null,
+              status: toolStatus(parsed.status) ?? (parsed.is_error === true ? "error" : null),
+              call_id: parsed.call_id ?? parsed.id ?? null,
+              phase: "result",
+            },
           });
         }
       } else if (parsed.type === "reasoning" || parsed.type === "agent_reasoning") {
@@ -458,7 +588,25 @@ function extractFromJsonl(content) {
           });
         }
       } else if (parsed.type === "session_meta" && parsed.payload) {
-        // Codex session meta - 记录但不作为消息
+        // Codex session meta — identity/context only, not a message.
+        const payload = parsed.payload;
+        if (!rootMeta.native_id && payload.id) {
+          rootMeta.native_id = String(payload.id);
+          rootMeta.native_id_kind = "uuid";
+          rootMeta.native_id_source = "codex.session_meta.id";
+        }
+        if (!rootMeta.cwd && typeof payload.cwd === "string" && payload.cwd.trim()) {
+          rootMeta.cwd = payload.cwd.trim();
+          rootMeta.cwd_source = "codex.session_meta.cwd";
+        }
+        if (!rootMeta.agent_version && payload.cli_version) {
+          rootMeta.agent_version = String(payload.cli_version);
+        }
+        const remote = payload.git?.repository_url;
+        if (!rootMeta.git_remote && typeof remote === "string" && remote.trim()) {
+          rootMeta.git_remote = remote.trim();
+          rootMeta.git_remote_source = "source_record";
+        }
       } else if (parsed.type === "input_text") {
         // Codex input text
         if (parsed.text) {
@@ -519,6 +667,12 @@ function extractFromJsonl(content) {
             content: `[Tool Use] ${parsed.name}\n${toolInput}`,
             ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {}),
             meta: { kind: "tool_use", name: parsed.name },
+            tool_call: {
+              name: parsed.name,
+              status: toolStatus(parsed.status),
+              call_id: parsed.id ?? parsed.tool_use_id ?? parsed.call_id ?? null,
+              phase: "call",
+            },
           });
         }
       } else if (parsed.type === "tool_result") {
@@ -531,6 +685,12 @@ function extractFromJsonl(content) {
             content: isError ? `[Tool Error] ${resultContent}` : `[Tool Result] ${resultContent}`,
             ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {}),
             meta: { kind: "tool_result", ...(parsed.name ? { name: parsed.name } : {}) },
+            tool_call: {
+              name: parsed.name ?? null,
+              status: toolStatus(parsed.status) ?? (parsed.is_error === true ? "error" : null),
+              call_id: parsed.tool_use_id ?? parsed.call_id ?? parsed.id ?? null,
+              phase: "result",
+            },
           });
         }
       } else if (parsed.type === "mcp_tool_call") {
@@ -541,7 +701,13 @@ function extractFromJsonl(content) {
           messages.push({
             role: "assistant",
             content: `[MCP Tool Call] ${toolName}\n${args}`,
-            ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {})
+            ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {}),
+            tool_call: {
+              name: toolName,
+              status: toolStatus(parsed.status),
+              call_id: parsed.id ?? parsed.call_id ?? null,
+              phase: "call",
+            },
           });
         }
       } else if (parsed.type === "mcp_tool_result") {
@@ -551,7 +717,13 @@ function extractFromJsonl(content) {
           messages.push({
             role: "user",
             content: `[MCP Result] ${resultStr}`,
-            ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {})
+            ...(parsed.timestamp ? { timestamp: parsed.timestamp } : {}),
+            tool_call: {
+              name: parsed.tool ?? parsed.name ?? null,
+              status: toolStatus(parsed.status) ?? (parsed.is_error === true ? "error" : null),
+              call_id: parsed.call_id ?? parsed.id ?? null,
+              phase: "result",
+            },
           });
         }
       } else if (parsed.type === "attachment") {
@@ -654,25 +826,38 @@ function extractFromJsonl(content) {
     } catch {
       warnings.push(`Skipped invalid JSONL line`);
     }
-    for (let i = before; i < messages.length; i++) {
-      messages[i]._sessionId = lineSession || null;
-    }
+    applyLineMeta();
   }
 
-  return finalizeJsonl(messages, context, warnings);
+  return finalizeJsonl(messages, context, warnings, rootMeta);
 }
 
-function finalizeJsonl(messages, context, warnings) {
+function finalizeJsonl(messages, context, warnings, rootMeta = {}) {
   const sawSession = messages.some((m) => m._sessionId);
   const strip = (m) => {
-    const { _sessionId, ...rest } = m;
+    const { _sessionId, _line, ...rest } = m;
+    if (rest.line == null && Number.isInteger(_line)) rest.line = _line;
     return rest;
+  };
+  const firstUserOf = (list) => list.find((m) => m.role === "user");
+  const promptOf = (list) => {
+    const firstUser = firstUserOf(list);
+    return typeof firstUser?.content === "string" ? firstUser.content.slice(0, 120) : null;
   };
   if (!sawSession) {
     const clean = messages.map(strip);
-    const firstUser = clean.find((m) => m.role === "user");
-    const prompt = typeof firstUser?.content === "string" ? firstUser.content.slice(0, 120) : null;
-    return { messages: clean, context, prompt, confidence: clean.length > 0 ? "high" : "unknown", warnings };
+    const sessionMeta = { ...rootMeta };
+    return {
+      messages: clean,
+      sessions: rootMeta.native_id
+        ? [{ id: rootMeta.native_id, messages: clean, sessionMeta }]
+        : undefined,
+      sessionMeta,
+      context,
+      prompt: promptOf(clean),
+      confidence: clean.length > 0 ? "high" : "unknown",
+      warnings,
+    };
   }
   const buckets = new Map();
   for (const m of messages) {
@@ -680,17 +865,90 @@ function finalizeJsonl(messages, context, warnings) {
     if (!buckets.has(id)) buckets.set(id, []);
     buckets.get(id).push(strip(m));
   }
-  const sessions = [...buckets.entries()].map(([id, msgs]) => ({ id, messages: msgs }));
+  const sessions = [...buckets.entries()].map(([id, msgs]) => {
+    const grouped = id !== "ungrouped";
+    return {
+      id: grouped ? id : (rootMeta.native_id || null),
+      messages: msgs,
+      sessionMeta: groupsSessionMeta(rootMeta, grouped ? id : null),
+    };
+  });
   const flat = sessions.flatMap((s) => s.messages);
-  const firstUser = flat.find((m) => m.role === "user");
-  const prompt = typeof firstUser?.content === "string" ? firstUser.content.slice(0, 120) : null;
   return {
     messages: flat,
     sessions,
+    sessionMeta: { ...rootMeta },
     context,
-    prompt,
+    prompt: promptOf(flat),
     confidence: flat.length > 0 ? "high" : "unknown",
     warnings,
+  };
+}
+
+function groupsSessionMeta(rootMeta, bucketId) {
+  const meta = { ...rootMeta };
+  if (bucketId) {
+    meta.native_id = bucketId;
+    meta.native_id_kind = "native";
+    meta.native_id_source = rootMeta.native_id === bucketId ? rootMeta.native_id_source : "line.sessionId";
+  }
+  return meta;
+}
+
+/**
+ * Cursor agent transcript: one JSON object per turn, shaped
+ * { role, message: { content: [ { type: "text" | "tool_use" | "tool_result", ... } ] } }.
+ * The session id comes from the agent-transcripts/<uuid>/ directory name.
+ * There is no per-message timestamp in the file, so messages keep timestamp unset.
+ */
+function extractFromCursorTranscript(content, filePath) {
+  const messages = [];
+  const warnings = [];
+  let lineNo = 0;
+  for (const line of content.split("\n")) {
+    lineNo += 1;
+    if (!line.trim()) continue;
+    let parsed;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      warnings.push("Skipped invalid JSONL line");
+      continue;
+    }
+    if (!parsed || typeof parsed !== "object") continue;
+    const raw = parsed.message && typeof parsed.message === "object" ? parsed.message : parsed;
+    const role = parsed.role || raw.role;
+    if (!role) continue;
+    const blocks = Array.isArray(raw.content)
+      ? raw.content
+      : (typeof raw.content === "string" ? [{ type: "text", text: raw.content }] : []);
+    if (blocks.length === 0) continue;
+    const expanded = expandMessage({
+      role,
+      content: blocks,
+      ...(raw.model ? { model: raw.model } : {}),
+    });
+    for (const [index, msg] of expanded.entries()) {
+      msg.line = lineNo;
+      if (!msg.id && raw.id != null) {
+        msg.id = index === 0 ? String(raw.id) : `${raw.id}#${index}`;
+        msg.id_source = index === 0 ? "id" : "id+block";
+      }
+      messages.push(msg);
+    }
+  }
+
+  const firstUser = messages.find((m) => m.role === "user");
+  const match = /\/agent-transcripts\/([^/]+)\//.exec(String(filePath || "").replace(/\\/g, "/"));
+  return {
+    messages,
+    context: { files: [], diffs: [] },
+    prompt: typeof firstUser?.content === "string" ? firstUser.content.slice(0, 120) : null,
+    confidence: messages.length > 0 ? "high" : "unknown",
+    warnings,
+    sessionMeta: match?.[1]
+      ? { native_id: match[1], native_id_kind: "uuid", native_id_source: "dir.basename" }
+      : {},
   };
 }
 
@@ -782,13 +1040,25 @@ function extractFromJson(content) {
   const warnings = [];
   try {
     const parsed = JSON.parse(content);
+    const rootMeta = sessionMetaFromParsed(parsed);
     const groups = sessionGroupsFromParsed(parsed);
     if (groups.length > 0) {
-      const messages = groups.flatMap((g) => g.messages);
+      const withMeta = groups.map((g) => ({
+        ...g,
+        sessionMeta: mergeSessionBlock(buildSessionBlock(rootMeta), {
+          ...(g.id ? {
+            native_id: String(g.id),
+            native_id_kind: "native",
+            native_id_source: rootMeta.native_id === String(g.id) ? rootMeta.native_id_source : "record.session_id",
+          } : {}),
+        }),
+      }));
+      const messages = withMeta.flatMap((g) => g.messages);
       const firstUser = messages.find((m) => m.role === "user");
       return {
         messages,
-        sessions: groups,
+        sessions: withMeta,
+        sessionMeta: rootMeta,
         context: { files: [], diffs: [] },
         prompt: typeof firstUser?.content === "string" ? firstUser.content.slice(0, 120) : null,
         confidence: "high",
@@ -802,13 +1072,38 @@ function extractFromJson(content) {
       const firstUser = messages.find((m) => m.role === "user");
       const prompt = firstUser?.content?.slice(0, 120) ?? null;
       const confidence = ["cursor-tabs", "cursor-composer", "openai-messages", "claude-conversation", "sharegpt"].includes(schemaName) ? "high" : "low";
-      return { messages, context, prompt, confidence, warnings };
+      return { messages, context, prompt, confidence, warnings, sessionMeta: rootMeta };
     }
 
-    return { messages: [], context: { files: [], diffs: [] }, prompt: null, confidence: "unknown", warnings };
+    return { messages: [], context: { files: [], diffs: [] }, prompt: null, confidence: "unknown", warnings, sessionMeta: rootMeta };
   } catch {
     return { messages: [], context: { files: [], diffs: [] }, prompt: null, confidence: "unknown", warnings: ["JSON parse error"] };
   }
+}
+
+/** Session-level metadata that a JSON conversation may record at its root. */
+function sessionMetaFromParsed(parsed) {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+  const meta = {};
+  const nativeId = parsed.sessionId || parsed.session_id || parsed.conversationId || parsed.conversation_id;
+  if (nativeId) {
+    meta.native_id = String(nativeId);
+    meta.native_id_kind = "native";
+    meta.native_id_source = "record.session_id";
+  }
+  const cwd = parsed.cwd || parsed.workspaceFolder || parsed.workspace_folder || parsed.projectPath;
+  if (typeof cwd === "string" && cwd.trim()) {
+    meta.cwd = cwd.trim();
+    meta.cwd_source = "record.cwd";
+  }
+  const remote = parsed.gitRemoteUrl || parsed.git_remote_url || parsed.git?.repository_url || parsed.repository_url;
+  if (typeof remote === "string" && remote.trim()) {
+    meta.git_remote = remote.trim();
+    meta.git_remote_source = "source_record";
+  }
+  const version = parsed.agentVersion || parsed.agent_version || parsed.cli_version || parsed.version;
+  if (typeof version === "string" && version.trim()) meta.agent_version = version.trim();
+  return meta;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

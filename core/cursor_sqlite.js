@@ -12,6 +12,8 @@
 import Database from "better-sqlite3";
 import fs from "fs-extra";
 import crypto from "crypto";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { glob } from "glob";
 import pLimit from "p-limit";
 import { SCHEMA_VERSION } from "./normalize.js";
@@ -138,6 +140,7 @@ export async function readAllCursorSqlite(dbPaths, workers = 4) {
  */
 export function readCursorSqlite(dbPath) {
   const results = [];
+  const workspaceCwd = readWorkspaceFolderFromVscdb(dbPath);
   let db;
   try {
     db = new Database(dbPath, { readonly: true, fileMustExist: true });
@@ -167,7 +170,7 @@ export function readCursorSqlite(dbPath) {
         if (!raw || raw.length < 10) continue;
 
         const parsed = JSON.parse(raw);
-        const { messages, createdAt, updatedAt } = extractMessages(parsed, row.key);
+        const { messages, createdAt, updatedAt, nativeId } = extractMessages(parsed, row.key);
         if (messages.length === 0) continue;
 
         const firstUser = messages.find((m) => m.role === "user");
@@ -184,6 +187,16 @@ export function readCursorSqlite(dbPath) {
           schema_version: SCHEMA_VERSION,
           thread_id: threadId,
           type: "thread",
+          session: {
+            native_id: nativeId || null,
+            native_id_kind: nativeId ? "composer" : "none",
+            native_id_source: nativeId ? "vscdb.composer_id" : null,
+            cwd: workspaceCwd,
+            cwd_source: workspaceCwd ? "vscdb.workspace_json" : null,
+            git_remote: null,
+            git_remote_source: null,
+            agent_version: null,
+          },
           messages,
           context: { files: [], diffs: [] },
           meta: {
@@ -216,19 +229,24 @@ export function readCursorSqlite(dbPath) {
 function extractMessages(parsed, key = "") {
   let createdAt = null;
   let updatedAt = null;
+  let nativeId = null;
 
   // 0. Cursor composer.composerData: { allComposers: [{ name, conversation: [...] }] }
   if (key === "composer.composerData" && Array.isArray(parsed?.allComposers)) {
     const allMessages = [];
+    const composerIds = [];
     for (const composer of parsed.allComposers) {
       if (Array.isArray(composer.conversation)) {
         allMessages.push(...expandMessageList(composer.conversation));
         if (composer.createdAt && !createdAt) createdAt = new Date(composer.createdAt).toISOString();
         if (composer.lastUpdatedAt) updatedAt = new Date(composer.lastUpdatedAt).toISOString();
+        if (composer.composerId) composerIds.push(String(composer.composerId));
       }
     }
     if (allMessages.length > 0) {
-      return { messages: allMessages, createdAt, updatedAt };
+      // Only claim a native id when this row covers exactly one composer.
+      if (composerIds.length === 1) nativeId = composerIds[0];
+      return { messages: allMessages, createdAt, updatedAt, nativeId };
     }
   }
 
@@ -242,10 +260,11 @@ function extractMessages(parsed, key = "") {
         role: "assistant",
         content: g.textDescription || "",
         ...(g.unixMs ? { timestamp: new Date(g.unixMs).toISOString() } : {}),
+        ...(g.id ? { id: String(g.id), id_source: "generation.id" } : {}),
       }));
       if (entries[0]?.unixMs) createdAt = new Date(entries[0].unixMs).toISOString();
       if (entries[entries.length - 1]?.unixMs) updatedAt = new Date(entries[entries.length - 1].unixMs).toISOString();
-      return { messages, createdAt, updatedAt };
+      return { messages, createdAt, updatedAt, nativeId };
     }
   }
 
@@ -256,7 +275,8 @@ function extractMessages(parsed, key = "") {
       const messages = expandMessageList(conv);
       createdAt = conv[0]?.timestamp || null;
       updatedAt = conv[conv.length - 1]?.timestamp || null;
-      return { messages, createdAt, updatedAt };
+      if (parsed.composerData.composerId) nativeId = String(parsed.composerData.composerId);
+      return { messages, createdAt, updatedAt, nativeId };
     }
   }
 
@@ -267,15 +287,18 @@ function extractMessages(parsed, key = "") {
       const startTime = tab.bubbles?.[0]?.timingInfo?.clientStartTime;
       if (!createdAt && startTime) createdAt = new Date(startTime).toISOString();
       for (const bubble of tab.bubbles || []) {
+        const bubbleTime = bubble.timingInfo?.clientStartTime;
         messages.push(...expandMessageList([{
           role: bubble.type === "ai" ? "assistant" : "user",
           content: bubble.rawText || bubble.text || bubble.content || "",
+          ...(bubble.bubbleId ? { bubbleId: String(bubble.bubbleId) } : {}),
+          ...(bubbleTime ? { timestamp: new Date(bubbleTime).toISOString() } : {}),
         }]));
       }
       const lastTime = tab.bubbles?.[tab.bubbles.length - 1]?.timingInfo?.clientStartTime;
       if (lastTime) updatedAt = new Date(lastTime).toISOString();
     }
-    if (messages.length > 0) return { messages, createdAt, updatedAt };
+    if (messages.length > 0) return { messages, createdAt, updatedAt, nativeId };
   }
 
   // 3. Standard messages array: { messages: [{ role, content }] }
@@ -283,7 +306,7 @@ function extractMessages(parsed, key = "") {
     const messages = expandMessageList(parsed.messages);
     createdAt = parsed.messages[0]?.timestamp || null;
     updatedAt = parsed.messages[parsed.messages.length - 1]?.timestamp || null;
-    return { messages, createdAt, updatedAt };
+    return { messages, createdAt, updatedAt, nativeId };
   }
 
   // 4. Conversation/history arrays
@@ -298,7 +321,7 @@ function extractMessages(parsed, key = "") {
       const messages = expandMessageList(arr);
       createdAt = arr[0]?.timestamp || null;
       updatedAt = arr[arr.length - 1]?.timestamp || null;
-      return { messages, createdAt, updatedAt };
+      return { messages, createdAt, updatedAt, nativeId };
     }
   }
 
@@ -308,14 +331,15 @@ function extractMessages(parsed, key = "") {
       role: m.role || "user",
       content: m.content || m.text || "",
       ...(m.ts ? { timestamp: new Date(m.ts * 1000).toISOString() } : {}),
+      ...(m.id ? { id: String(m.id), id_source: "task.id" } : {}),
     })));
     if (messages.length > 0) {
       updatedAt = messages[messages.length - 1]?.timestamp || null;
-      return { messages, createdAt, updatedAt };
+      return { messages, createdAt, updatedAt, nativeId };
     }
   }
 
-  return { messages: [], createdAt, updatedAt };
+  return { messages: [], createdAt, updatedAt, nativeId };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -344,4 +368,34 @@ function inferProjectFromPath(dbPath) {
   if (workIdx >= 0 && parts[workIdx + 1]) return parts[workIdx + 1];
   // workspaceStorage hash dir → look at the hash's parent for hints
   return parts[Math.max(0, parts.length - 2)] || "cursor";
+}
+
+function uriToPath(value) {
+  if (typeof value !== "string" || !value) return null;
+  if (value.startsWith("file://")) {
+    try {
+      return fileURLToPath(value);
+    } catch {
+      return null;
+    }
+  }
+  return value.startsWith("/") ? value : null;
+}
+
+/**
+ * VS Code family workspaceStorage keeps workspace.json next to state.vscdb:
+ * { "folder": "file:///path" } or { "workspace": "file:///path/x.code-workspace" }.
+ * This is the only reliable cwd for vscdb-backed records.
+ * @param {string} dbPath
+ * @returns {string|null}
+ */
+export function readWorkspaceFolderFromVscdb(dbPath) {
+  try {
+    const metaPath = path.join(path.dirname(dbPath), "workspace.json");
+    if (!fs.existsSync(metaPath)) return null;
+    const data = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+    return uriToPath(data.folder) || uriToPath(data.workspace?.uri) || uriToPath(data.workspace) || null;
+  } catch {
+    return null;
+  }
 }

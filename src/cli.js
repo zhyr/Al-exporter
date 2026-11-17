@@ -35,6 +35,7 @@ export Options:
   --since <ISO8601>      Only export records newer than this date
   --workers <n>          Concurrent file workers  (default: 8)
   --redact               Redact secrets, API keys and PII before writing to disk
+  --source-device <id>   Device that owns the agent records (when exporting a mounted backup)
 
 scan Options:
   --json                 Output machine-readable JSON to stdout
@@ -128,6 +129,7 @@ async function main() {
           since:   args.since   ? parseDate(args.since, "since") : null,
           workers: args.workers ? parsePositiveInt(args.workers, "workers") : 8,
           redact:  args.redact === true,
+          sourceDevice: typeof args["source-device"] === "string" ? args["source-device"] : null,
         });
         log.info(`✅ Done  new=${result.new_items}  skipped=${result.skipped_items}  total=${result.total}${result.redacted ? `  redacted=${result.redacted}` : ""}`);
         break;

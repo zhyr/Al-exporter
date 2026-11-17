@@ -39,7 +39,7 @@ describe("normalizeAll — OpenAI messages schema", () => {
   const records = normalizeAll(raw);
 
   it("produces at least one record", () => assert.ok(records.length >= 1));
-  it("sets schema_version", () => assert.equal(records[0].schema_version, "1.0.0"));
+  it("sets schema_version", () => assert.equal(records[0].schema_version, "1.1.0"));
   it("sets thread_id", () => assert.ok(records[0].thread_id?.length > 0));
   it("has recognition_confidence", () => assert.ok(["high","low","unknown"].includes(records[0].meta.recognition_confidence)));
   it("extracts 2 messages", () => assert.equal(records[0].messages.length, 2));

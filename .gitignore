@@ -18,7 +18,8 @@ Thumbs.db
 # Project specific
 agent-backup/
 agent-backup-test/
-docs/
+docs/*
+!docs/export-format.md
 *.log
 viewer/data.js
 AI-Exporter2Eval梳理和对齐.md

@@ -12,7 +12,7 @@ const ajv = new Ajv({ allErrors: true, strict: false });
 // so the validator can never drift from what normalize() actually emits.
 const SOURCE_ENUM = [...ALLOWED_SOURCES].sort();
 
-// Unified thread record schema (§6 data model v1.0.0)
+// Unified thread record schema (§6 data model v1.1.0)
 const THREAD_SCHEMA = {
   $schema: "http://json-schema.org/draft-07/schema#",
   title: "AI Exporter Unified Thread",
@@ -25,6 +25,30 @@ const THREAD_SCHEMA = {
       type: "string",
       enum: ["thread", "agent", "plan", "task", "walkthrough", "artifact", "mcp", "rule", "config", "log"],
     },
+    session: {
+      type: "object",
+      properties: {
+        native_id:         { type: ["string", "null"] },
+        native_id_kind:    { type: "string" },
+        native_id_source:  { type: ["string", "null"] },
+        cwd:               { type: ["string", "null"] },
+        cwd_source:        { type: ["string", "null"] },
+        git_remote:        { type: ["string", "null"] },
+        git_remote_source: { type: ["string", "null"] },
+        agent_version:     { type: ["string", "null"] },
+      },
+    },
+    device: {
+      type: "object",
+      properties: {
+        source_device_id:        { type: ["string", "null"] },
+        source_device_id_basis:  { type: ["string", "null"] },
+        source_hostname:         { type: ["string", "null"] },
+        collector_device_id:     { type: ["string", "null"] },
+        collector_hostname:      { type: ["string", "null"] },
+        collector_platform:      { type: ["string", "null"] },
+      },
+    },
     messages: {
       type: "array",
       items: {
@@ -36,6 +60,18 @@ const THREAD_SCHEMA = {
           timestamp: { type: "string" },
           model:     { type: "string" },
           meta:      { type: "object" },
+          id:        { type: ["string", "null"] },
+          id_source: { type: ["string", "null"] },
+          line:      { type: ["integer", "null"], minimum: 1 },
+          tool_call: {
+            type: "object",
+            properties: {
+              name:    { type: ["string", "null"] },
+              status:  { type: ["string", "null"] },
+              call_id: { type: ["string", "null"] },
+              phase:   { type: "string", enum: ["call", "result"] },
+            },
+          },
         },
       },
     },
@@ -131,6 +167,7 @@ export function conformThreadRecord(record) {
     }
   }
   if (Array.isArray(record.messages)) {
+    record.messages = record.messages.filter((message) => message && typeof message === "object" && !Array.isArray(message));
     for (const message of record.messages) {
       if (!message || typeof message !== "object") continue;
       if (message.content != null && typeof message.content !== "string") {
@@ -145,6 +182,19 @@ export function conformThreadRecord(record) {
         if (message.timestamp == null) delete message.timestamp;
       } else if (typeof message.timestamp !== "string") {
         message.timestamp = String(message.timestamp);
+      }
+      if (message.id != null) message.id = String(message.id);
+      else if ("id" in message) message.id = null;
+      if (message.id_source != null) message.id_source = String(message.id_source);
+      else if ("id_source" in message) message.id_source = null;
+      if (!Number.isInteger(message.line) || message.line < 1) {
+        if ("line" in message) message.line = null;
+      }
+      if (message.tool_call && typeof message.tool_call === "object") {
+        if (message.tool_call.name != null) message.tool_call.name = String(message.tool_call.name);
+        if (message.tool_call.status != null) message.tool_call.status = String(message.tool_call.status);
+        if (message.tool_call.call_id != null) message.tool_call.call_id = String(message.tool_call.call_id);
+        if (message.tool_call.phase !== "result") message.tool_call.phase = "call";
       }
     }
   }

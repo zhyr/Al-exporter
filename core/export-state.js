@@ -18,16 +18,19 @@ export function exportStatePath(outputDir) {
 
 /**
  * @param {string} stateFile
- * @returns {{ files: Record<string, { mtime_ms: number, thread_ids: string[], outputs: string[] }> }}
+ * @returns {{ files: Record<string, { mtime_ms: number, thread_ids: string[], outputs: string[] }>, schema_version: string|null }}
  */
 export function loadExportState(stateFile) {
   try {
-    if (!fs.existsSync(stateFile)) return { files: {} };
+    if (!fs.existsSync(stateFile)) return { files: {}, schema_version: null };
     const parsed = JSON.parse(fs.readFileSync(stateFile, "utf8"));
-    if (!parsed || typeof parsed !== "object") return { files: {} };
-    return { files: parsed.files && typeof parsed.files === "object" ? parsed.files : {} };
+    if (!parsed || typeof parsed !== "object") return { files: {}, schema_version: null };
+    return {
+      files: parsed.files && typeof parsed.files === "object" ? parsed.files : {},
+      schema_version: typeof parsed.schema_version === "string" ? parsed.schema_version : null,
+    };
   } catch {
-    return { files: {} };
+    return { files: {}, schema_version: null };
   }
 }
 

@@ -77,33 +77,68 @@ function stampOf(m) {
   return { timestamp: String(timestamp) };
 }
 
-function toolUseMessage(name, detail, stamp) {
+/** Native message id and which source key it came from. */
+function identityOf(m) {
+  if (!m || typeof m !== "object") return {};
+  for (const [source, value] of [
+    ["uuid", m.uuid],
+    ["messageId", m.messageId],
+    ["bubbleId", m.bubbleId],
+    ["id", m.id],
+  ]) {
+    if (value != null && value !== "") return { id: String(value), id_source: source };
+  }
+  return {};
+}
+
+/** 1-based source line number, only when the extractor recorded one. */
+function lineOf(m) {
+  const raw = m?._line ?? m?.line;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 ? n : null;
+}
+
+function toolUseMessage(name, detail, stamp, tool = {}, extra = {}) {
   const toolName = name || "tool";
   const body = detail ? `\n${detail}` : "";
   return {
     role: "assistant",
     content: `[Tool Use] ${toolName}${body}`,
     ...stamp,
+    ...extra,
     meta: { kind: "tool_use", name: toolName },
+    tool_call: {
+      name: toolName,
+      status: tool?.status ?? null,
+      call_id: tool?.call_id ?? null,
+      phase: "call",
+    },
   };
 }
 
-function toolResultMessage(body, stamp, name) {
+function toolResultMessage(body, stamp, name, tool = {}, extra = {}) {
   return {
     role: "user",
     content: `[Tool Result] ${body}`,
     ...stamp,
+    ...extra,
     meta: { kind: "tool_result", ...(name ? { name } : {}) },
+    tool_call: {
+      name: name || tool?.name || null,
+      status: tool?.status ?? null,
+      call_id: tool?.call_id ?? null,
+      phase: "result",
+    },
   };
 }
 
-function expandBlocks(blocks, role, stamp) {
+function expandBlocks(blocks, role, stamp, extra = {}) {
   const out = [];
   const text = [];
   const flush = () => {
     const joined = text.join("\n");
     text.length = 0;
-    if (joined.trim()) out.push({ role, content: joined, ...stamp });
+    if (joined.trim()) out.push({ role, content: joined, ...stamp, ...extra });
   };
   for (const block of blocks) {
     if (typeof block === "string") {
@@ -115,13 +150,19 @@ function expandBlocks(blocks, role, stamp) {
       flush();
       const args = block.input ?? block.arguments ?? block.args ?? "";
       const argText = typeof args === "string" ? args : JSON.stringify(args);
-      out.push(toolUseMessage(block.name || block.tool, argText, stamp));
+      out.push(toolUseMessage(block.name || block.tool, argText, stamp, {
+        status: block.status ?? null,
+        call_id: block.id ?? block.call_id ?? block.tool_use_id ?? null,
+      }, extra));
       continue;
     }
     if (block.type === "tool_result" || block.type === "function_call_output") {
       flush();
       const body = contentToString(block.content ?? block.output ?? "");
-      out.push(toolResultMessage(body, stamp, block.name || block.tool || ""));
+      out.push(toolResultMessage(body, stamp, block.name || block.tool || "", {
+        status: block.status ?? (block.is_error === true ? "error" : null),
+        call_id: block.tool_use_id ?? block.call_id ?? block.id ?? null,
+      }, extra));
       continue;
     }
     if (block.type === "text" || typeof block.text === "string") {
@@ -145,19 +186,34 @@ export function expandMessage(m) {
   if (!m || typeof m !== "object") return [];
   const role = mapChatRole(m.role || (m.type === "ai" ? "assistant" : m.type === "user" || m.type === "human" ? "user" : ""));
   const stamp = stampOf(m);
+  const identity = identityOf(m);
+  const line = lineOf(m);
+  const extra = line ? { line } : {};
+  // One source record can expand to several messages (text + tool blocks).
+  // Keep each message id unique and say so in id_source.
+  const attachIdentity = (list) => list.map((msg, index) => {
+    if (!identity.id || msg.id) return msg;
+    if (index === 0) return { ...msg, ...identity };
+    return {
+      ...msg,
+      id: `${identity.id}#${index}`,
+      id_source: identity.id_source ? `${identity.id_source}+block` : "block",
+    };
+  });
   if (Array.isArray(m.content)) {
-    const expanded = expandBlocks(m.content, role, stamp).map((msg) => {
+    const expanded = expandBlocks(m.content, role, stamp, extra).map((msg) => {
       if (msg.role !== "user" || msg.meta?.kind) return msg;
       const cleaned = cleanInjectedUserText(msg.content);
       return cleaned === msg.content ? msg : { ...msg, content: cleaned };
     });
-    return expanded.length ? expanded : [{ role, content: "", ...stamp }];
+    const list = expanded.length ? expanded : [{ role, content: "", ...stamp, ...extra }];
+    return attachIdentity(list);
   }
   let content = contentToString(m.content ?? m.text ?? m.rawText ?? "");
   if (role === "user") content = cleanInjectedUserText(content);
-  const msg = { role, content, ...stamp };
+  const msg = { role, content, ...stamp, ...extra };
   if (m.model) msg.model = m.model;
-  return [msg];
+  return attachIdentity([msg]);
 }
 
 /**

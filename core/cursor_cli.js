@@ -169,6 +169,16 @@ export function collectCursorCliRecords(chatsDir = defaultCursorCliChatsDir()) {
         schema_version: SCHEMA_VERSION,
         thread_id: makeId(storePath),
         type: "thread",
+        session: {
+          native_id: sess.name,
+          native_id_kind: "uuid",
+          native_id_source: "dir.basename",
+          cwd: cwd ? String(cwd) : null,
+          cwd_source: cwd ? "cursor_cli.meta" : null,
+          git_remote: null,
+          git_remote_source: null,
+          agent_version: meta.version ? String(meta.version) : null,
+        },
         messages: parsed.messages,
         context: { files: [], diffs: [] },
         meta: {

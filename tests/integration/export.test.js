@@ -53,6 +53,42 @@ describe("runExport integration", () => {
     assert.ok(Array.isArray(manifest.sources_seen), "sources_seen should be array");
   });
 
+  it("writes the interop contract and capability report", async () => {
+    const manifest = await fs.readJson(path.join(outputDir, "manifest.json"));
+    assert.equal(manifest.contract?.name, "al-exporter-interop");
+    assert.equal(manifest.contract?.capabilities, "interop.json");
+    assert.ok(manifest.contract?.capabilities_sha256);
+    assert.ok(manifest.device?.collector_device_id);
+
+    const interopPath = path.join(outputDir, "interop.json");
+    assert.ok(await fs.pathExists(interopPath), "interop.json should exist");
+    const interop = await fs.readJson(interopPath);
+    assert.equal(interop.schema_version, manifest.schema_version);
+    assert.ok(interop.fields["session.native_id"], "field report missing");
+    assert.equal(typeof interop.fields["session.native_id"].empty, "number");
+    assert.ok(Array.isArray(interop.known_gaps));
+    assert.ok(interop.capabilities.native_session_id);
+  });
+
+  it("records carry explicit session and device fields", async () => {
+    const manifest = await fs.readJson(path.join(outputDir, "manifest.json"));
+    const filePaths = manifest.items.filter(i => i.file).map(i => path.join(outputDir, i.file));
+    if (filePaths.length === 0) return;
+    const records = await Promise.all(filePaths.map(p => fs.readJson(p)));
+    for (const record of records) {
+      assert.equal(record.schema_version, manifest.schema_version);
+      assert.ok(record.session, "session block missing");
+      assert.ok("native_id" in record.session);
+      assert.ok("cwd" in record.session);
+      assert.ok("git_remote" in record.session);
+      assert.ok(record.device?.collector_device_id, "device block missing");
+      for (const message of record.messages) {
+        assert.ok("id" in message, "message.id missing");
+        assert.ok("line" in message, "message.line missing");
+      }
+    }
+  });
+
   it("manifest items have sha256", async () => {
     const manifest = await fs.readJson(path.join(outputDir, "manifest.json"));
     const itemsWithFile = manifest.items.filter(i => i.file);

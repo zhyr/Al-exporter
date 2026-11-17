@@ -113,6 +113,24 @@ npm run serve
 - **数据输出**: `./agent-backup/`
 - **Web 服务**: `http://127.0.0.1:8080`
 
+### 协同导出契约（Interop，schema 1.1.0）
+
+导出结果可被下游工具（如 Multi-Agent Timeline）直接识别与去重，不再依赖 `meta.file_path` 反推会话身份。完整字段表、兼容策略和已知缺口见 [docs/export-format.md](docs/export-format.md)。
+
+- **会话原生标识**：每条记录新增 `session.native_id`（来源可为 `sessionId`、会话文件名或会话目录名）、`session.cwd`、`session.git_remote`、`session.agent_version`，并标注每个值的来源字段。
+- **消息级定位**：每条消息新增 `id`（原生 uuid / 事件 id；同一源记录展开多条时以 `#n` 后缀保证唯一）、`id_source`、`line`（源文件 1-based 行号），以及结构化 `tool_call {name, status, call_id, phase}`。状态只取源里显式值，拿不到就是 `null`。
+- **设备身份独立**：`device.source_device_id` 与 `device.collector_device_id` 分开记录；跨机器导出备份时用 `--source-device` 声明被扫描端，避免把事件归到采集端。
+- **能力清单**：每次导出写 `interop.json`，逐字段给出 `applicable / non_empty / empty / status`，明确区分「字段不存在」与「字段为空」，并列出 `known_gaps`。
+- **兼容**：新增字段全部可选，旧消费者不受影响；schema 升级后 `.export_state.json` 自动失效一次，确保旧文件也会补齐新字段。`thread_id` 不变，按 `manifest.json` 读取即可。
+
+```bash
+# 跨机器备份：声明被扫描设备
+ai-exporter export --output ./agent-backup --source-device alice-laptop
+
+# 查看能力清单
+jq '.capabilities, .known_gaps' agent-backup/interop.json
+```
+
 ### 项目结构
 
 ```
@@ -370,6 +388,21 @@ Default storage locations by platform (macOS):
 
 - **Data Output**: `./agent-backup/`
 - **Web Server**: `http://127.0.0.1:8080`
+
+### Interop Contract (schema 1.1.0)
+
+Exports can be consumed and deduplicated directly by downstream tools (for example Multi-Agent Timeline) without reverse-engineering session identity from `meta.file_path`. See [docs/export-format.md](docs/export-format.md) for the full field table, compatibility rules and known gaps.
+
+- **Native session identity**: every record carries `session.native_id` (from `sessionId`, the session file name, or the session directory name), plus `session.cwd`, `session.git_remote`, `session.agent_version`, each with a provenance field.
+- **Message-level identity**: every message carries `id` (native uuid / event id), `id_source`, `line` (1-based source line), and a structured `tool_call {name, status, call_id, phase}`. Status comes only from the source; otherwise it is `null`.
+- **Separate device identity**: `device.source_device_id` and `device.collector_device_id` are distinct. Use `--source-device` when exporting a backup from another machine.
+- **Capability report**: `interop.json` records `applicable / non_empty / empty / status` per field, distinguishing “field absent” from “field present but empty”, and lists `known_gaps`.
+- **Compatibility**: all fields are additive; existing consumers keep working. A schema bump invalidates `.export_state.json` once so unchanged sources are re-read. `thread_id` stays stable; read `manifest.json` as the archive index.
+
+```bash
+ai-exporter export --output ./agent-backup --source-device alice-laptop
+jq '.capabilities, .known_gaps' agent-backup/interop.json
+```
 
 ### Project Structure
 
