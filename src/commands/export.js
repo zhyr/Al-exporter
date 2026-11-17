@@ -6,7 +6,7 @@ import os from "node:os";
 import fs from "fs-extra";
 import path from "node:path";
 import crypto from "node:crypto";
-import { scanAllTools } from "../../core/scan.js";
+import { scanAllTools, readZstdText } from "../../core/scan.js";
 import { normalizeAll, SCHEMA_VERSION } from "../../core/normalize.js";
 import { collectAllVscdbRecords } from "../../core/cursor_sqlite.js";
 import { collectCursorCliRecords } from "../../core/cursor_cli.js";
@@ -26,11 +26,18 @@ import {
   INTEROP_CONTRACT,
   INTEROP_CONTRACT_VERSION,
   INTEROP_FILENAME,
-  computeInteropCapabilities,
+  addInteropRecords,
+  buildInteropReport,
+  createInteropCounter,
   finalizeRecordInterop,
   resolveDeviceIdentity,
 } from "../../core/interop.js";
 import log from "../logger.js";
+import pLimit from "p-limit";
+
+// Upper bound for a single source file (matches the scanner default). Applies to
+// decompressed zstd payloads as well, so one huge rollout cannot exhaust memory.
+const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
 
 // Combined redaction patterns (API keys + passwords/JWT + PII). In-memory only.
 const REDACT_PATTERNS = [
@@ -118,7 +125,7 @@ export async function runExport(opts = {}) {
 
   // ── Scan ──────────────────────────────────────────────────────────────────
   progress(5, 100, "Scanning file-based sources…");
-  const scannedFiles = await scanAllTools({ workers, onProgress: (d, t, p) => progress(Math.round((d / Math.max(t, 1)) * 30) + 5, 100, `Scanning ${path.basename(p)}`) });
+  const scannedFiles = await scanAllTools({ workers, metadataOnly: true, onProgress: (d, t, p) => progress(Math.round((d / Math.max(t, 1)) * 30) + 5, 100, `Scanning ${path.basename(p)}`) });
   log.info(`Found ${scannedFiles.length} candidate files`);
 
   const stateFile = exportStatePath(output);
@@ -157,37 +164,150 @@ export async function runExport(opts = {}) {
   const cursorCliRecords = collectCursorCliRecords();
   log.info(`Cursor CLI: ${cursorCliRecords.length} records`);
 
-  // ── Normalize ─────────────────────────────────────────────────────────────
-  progress(60, 100, "Normalizing records…");
-  const fileRecords = normalizeAll(rawFiles);
-  let allRecords = [...fileRecords, ...sqliteRecords, ...cursorCliRecords];
+  // ── Normalize + write ─────────────────────────────────────────────────────
+  // Source files are read and normalized one at a time, then written
+  // immediately. A full-machine export therefore never holds every record (or
+  // every decompressed rollout) in memory at once.
+  progress(60, 100, "Normalizing and writing records…");
+  await fs.ensureDir(output);
 
-  // Apply --since filter
-  if (sinceCutoff) {
-    allRecords = allRecords.filter((r) => {
-      const ts = r.meta?.created_at ? new Date(r.meta.created_at).getTime() : 0;
-      return ts >= sinceCutoff;
-    });
-    log.info(`After --since filter: ${allRecords.length} records`);
+  const manifestItems = [...carriedManifestItems];
+  const sourcesSeen = new Set(carriedManifestItems.map((i) => i.source).filter(Boolean));
+  const interopCounter = createInteropCounter();
+  /** @type {Map<string, { mtime_ms: number, thread_ids: string[], outputs: string[] }>} */
+  const writtenBySource = new Map();
+  let processedRecords = 0;
+  let newCount = 0, skippedCount = 0;
+  let redactedCount = 0;
+  const redactMatches = {};
+
+  const consumeRecords = async (records) => {
+    for (const record of records) {
+      if (sinceCutoff) {
+        const ts = record.meta?.created_at ? new Date(record.meta.created_at).getTime() : 0;
+        if (ts < sinceCutoff) continue;
+      }
+
+      // Fill session/device/message identity fields before hashing so the
+      // written record and its content hash both reflect the contract.
+      finalizeRecordInterop(record, { devices });
+      addInteropRecords(interopCounter, [record]);
+      processedRecords++;
+
+      if (redact) {
+        const m = redactRecord(record);
+        const n = Object.values(m).reduce((a, b) => a + b, 0);
+        if (n > 0) {
+          redactedCount++;
+          for (const [k, v] of Object.entries(m)) redactMatches[k] = (redactMatches[k] || 0) + v;
+        }
+      }
+
+      conformThreadRecord(record);
+      const hash = threadHash(record);
+      const source = record.meta?.source || "unknown";
+      sourcesSeen.add(source);
+      const srcPath = record.meta?.file_path || "";
+      const srcMtime = record.meta?.updated_at
+        ? new Date(record.meta.updated_at).getTime()
+        : 0;
+
+      if (prevHashes.has(hash)) {
+        skippedCount++;
+        const relExisting = prevManifest?.items?.find((i) => i.hash === hash)?.file;
+        manifestItems.push({ hash, source, thread_id: record.thread_id, ...(relExisting ? { file: relExisting } : {}) });
+        if (srcPath && relExisting) {
+          const prev = writtenBySource.get(srcPath) || { mtime_ms: srcMtime, thread_ids: [], outputs: [] };
+          prev.mtime_ms = srcMtime || prev.mtime_ms;
+          prev.thread_ids.push(record.thread_id);
+          prev.outputs.push(relExisting);
+          writtenBySource.set(srcPath, prev);
+        }
+        continue;
+      }
+
+      const toolDir = path.join(output, source);
+      await fs.ensureDir(toolDir);
+      const slug = slugify(record.meta?.prompt || record.thread_id);
+      const filename = `${source}-${slug}-${hash}.json`;
+      const filePath = path.join(toolDir, filename);
+      await fs.writeJson(filePath, record, { spaces: 2 });
+
+      const fileContent = await fs.readFile(filePath);
+      const sha256 = crypto.createHash("sha256").update(fileContent).digest("hex");
+      const rel = path.relative(output, filePath);
+      manifestItems.push({ hash, sha256, source, thread_id: record.thread_id, file: rel });
+      newCount++;
+      if (srcPath) {
+        const prev = writtenBySource.get(srcPath) || { mtime_ms: srcMtime, thread_ids: [], outputs: [] };
+        prev.mtime_ms = srcMtime || prev.mtime_ms;
+        prev.thread_ids.push(record.thread_id);
+        prev.outputs.push(rel);
+        writtenBySource.set(srcPath, prev);
+      }
+    }
+  };
+
+  for (const f of rawFiles) {
+    if (f.zstd) {
+      const decoded = await readZstdText(f.path, MAX_SOURCE_BYTES);
+      if (!decoded) {
+        log.warn(`Skipped ${f.path}: cannot decompress within ${MAX_SOURCE_BYTES} bytes`);
+        continue;
+      }
+      await consumeRecords(normalizeAll([{
+        path: f.path,
+        content: decoded.text,
+        mtime: f.mtime,
+        size: decoded.bytes,
+      }]));
+      continue;
+    }
+    const content = await fs.readFile(f.path, "utf-8").catch(() => null);
+    if (!content || content.trim().length === 0) continue;
+    await consumeRecords(normalizeAll([{ path: f.path, content, mtime: f.mtime, size: f.size }]));
+  }
+  await consumeRecords([...sqliteRecords, ...cursorCliRecords]);
+
+  if (sinceCutoff) log.info(`After --since filter: ${processedRecords} records`);
+
+  for (const [srcPath, entry] of writtenBySource) {
+    rememberSourceFile(exportState, srcPath, entry);
+  }
+  saveExportState(exportState, stateFile);
+
+  if (redact) {
+    if (redactedCount > 0) {
+      log.warn(`Redacted sensitive data in ${redactedCount} record(s): ${JSON.stringify(redactMatches)}`);
+    } else {
+      log.info("Redaction scan complete — no secrets or PII detected.");
+    }
   }
 
-  // ── Interop contract (schema 1.1.0) ────────────────────────────────────────
-  // Fill session/device/message identity fields before hashing so the written
-  // record and its content hash both reflect the contract.
-  for (const record of allRecords) {
-    finalizeRecordInterop(record, { devices });
-  }
-
+  // ── Interop capability report ─────────────────────────────────────────────
+  // Incremental exports only normalize newly changed source files. Carry the
+  // already-written outputs into the capability counters so interop.json keeps
+  // describing the whole output directory, not just this batch.
   const exportedAt = new Date().toISOString();
-  const interop = computeInteropCapabilities(allRecords, {
+  if (stateSkippedFiles > 0) {
+    progress(90, 100, "Reading carried-forward records for interop…");
+    const limit = pLimit(Math.max(1, Math.min(workers, 8)));
+    await Promise.all(carriedManifestItems.map((item) => limit(async () => {
+      if (!item.file) return;
+      const carried = await fs.readJson(path.join(output, item.file)).catch(() => null);
+      if (carried && typeof carried === "object") addInteropRecords(interopCounter, [carried]);
+    })));
+  }
+  const interop = buildInteropReport(interopCounter, {
     generatedAt: exportedAt,
     exporterVersion: EXPORTER_VERSION,
     schemaVersion: SCHEMA_VERSION,
     devices,
     stateSkippedFiles,
+    basis: stateSkippedFiles > 0 ? "all_records_in_output" : "records_written_in_this_export",
   });
 
-  if (allRecords.length === 0) {
+  if (interopCounter.records_total === 0) {
     // Incremental re-export may write nothing; keep the last capability report
     // instead of replacing it with an empty one.
     const prevInterop = await fs.readJson(path.join(output, INTEROP_FILENAME)).catch(() => null);
@@ -199,85 +319,6 @@ export async function runExport(opts = {}) {
       Object.assign(interop, prevInterop);
     }
   }
-
-  // ── Redact (optional) ──────────────────────────────────────────────────────
-  let redactedCount = 0;
-  const redactMatches = {};
-  if (redact) {
-    progress(65, 100, "Redacting secrets & PII…");
-    for (const r of allRecords) {
-      const m = redactRecord(r);
-      const n = Object.values(m).reduce((a, b) => a + b, 0);
-      if (n > 0) {
-        redactedCount++;
-        for (const [k, v] of Object.entries(m)) redactMatches[k] = (redactMatches[k] || 0) + v;
-      }
-    }
-    if (redactedCount > 0) {
-      log.warn(`Redacted sensitive data in ${redactedCount} record(s): ${JSON.stringify(redactMatches)}`);
-    } else {
-      log.info("Redaction scan complete — no secrets or PII detected.");
-    }
-  }
-
-  // ── Write ─────────────────────────────────────────────────────────────────
-  progress(70, 100, "Writing output…");
-  await fs.ensureDir(output);
-  const manifestItems = [...carriedManifestItems];
-  const sourcesSeen = new Set(carriedManifestItems.map((i) => i.source).filter(Boolean));
-  let newCount = 0, skippedCount = 0;
-  /** @type {Map<string, { mtime_ms: number, thread_ids: string[], outputs: string[] }>} */
-  const writtenBySource = new Map();
-
-  for (const record of allRecords) {
-    conformThreadRecord(record);
-    const hash = threadHash(record);
-    const source = record.meta?.source || "unknown";
-    sourcesSeen.add(source);
-    const srcPath = record.meta?.file_path || "";
-    const srcMtime = record.meta?.updated_at
-      ? new Date(record.meta.updated_at).getTime()
-      : 0;
-
-    if (prevHashes.has(hash)) {
-      skippedCount++;
-      const relExisting = prevManifest?.items?.find((i) => i.hash === hash)?.file;
-      manifestItems.push({ hash, source, thread_id: record.thread_id, ...(relExisting ? { file: relExisting } : {}) });
-      if (srcPath && relExisting) {
-        const prev = writtenBySource.get(srcPath) || { mtime_ms: srcMtime, thread_ids: [], outputs: [] };
-        prev.mtime_ms = srcMtime || prev.mtime_ms;
-        prev.thread_ids.push(record.thread_id);
-        prev.outputs.push(relExisting);
-        writtenBySource.set(srcPath, prev);
-      }
-      continue;
-    }
-
-    const toolDir = path.join(output, source);
-    await fs.ensureDir(toolDir);
-    const slug = slugify(record.meta?.prompt || record.thread_id);
-    const filename = `${source}-${slug}-${hash}.json`;
-    const filePath = path.join(toolDir, filename);
-    await fs.writeJson(filePath, record, { spaces: 2 });
-
-    const fileContent = await fs.readFile(filePath);
-    const sha256 = crypto.createHash("sha256").update(fileContent).digest("hex");
-    const rel = path.relative(output, filePath);
-    manifestItems.push({ hash, sha256, source, thread_id: record.thread_id, file: rel });
-    newCount++;
-    if (srcPath) {
-      const prev = writtenBySource.get(srcPath) || { mtime_ms: srcMtime, thread_ids: [], outputs: [] };
-      prev.mtime_ms = srcMtime || prev.mtime_ms;
-      prev.thread_ids.push(record.thread_id);
-      prev.outputs.push(rel);
-      writtenBySource.set(srcPath, prev);
-    }
-  }
-
-  for (const [srcPath, entry] of writtenBySource) {
-    rememberSourceFile(exportState, srcPath, entry);
-  }
-  saveExportState(exportState, stateFile);
 
   // ── Interop capability report ─────────────────────────────────────────────
   progress(93, 100, "Writing interop capabilities…");
@@ -305,7 +346,7 @@ export async function runExport(opts = {}) {
       collector_device_id: devices.collector_device_id,
     },
     sources_seen: [...sourcesSeen].sort(),
-    total_items: allRecords.length + stateSkippedFiles,
+    total_items: processedRecords + stateSkippedFiles,
     new_items: newCount,
     skipped_items: skippedCount,
     state_skipped_files: stateSkippedFiles,
@@ -320,7 +361,7 @@ export async function runExport(opts = {}) {
     new_items: newCount,
     skipped_items: skippedCount,
     state_skipped_files: stateSkippedFiles,
-    total: allRecords.length,
+    total: processedRecords,
     sources_seen: [...sourcesSeen].sort(),
     manifest_path: manifestPath,
     interop_path: interopPath,

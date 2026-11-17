@@ -134,10 +134,13 @@ export function pathLooksLikeCursorAgentTranscript(filePath) {
 function normalizeItem(item) {
   let type = identifyType(item.path);
   let toolSource = normalizeMetaSource(detectTool(item.path));
-  const ext = path.extname(item.path).toLowerCase();
-  if (pathLooksLikeCursorAgentTranscript(item.path)) type = "thread";
+  // Compressed transcripts keep their real extension after decompression:
+  // rollout-*.jsonl.zst is parsed as JSONL, not as an opaque binary blob.
+  const logicalPath = item.path.toLowerCase().endsWith(".zst") ? item.path.slice(0, -4) : item.path;
+  const ext = path.extname(logicalPath).toLowerCase();
+  if (pathLooksLikeCursorAgentTranscript(logicalPath)) type = "thread";
 
-  const extracted = extractContent(item.content, item.path, ext);
+  const extracted = extractContent(item.content, logicalPath, ext);
   if (extracted.runtimeLog) type = "log";
   if (extracted.deleted) return [];
   if (extracted.forceSource) toolSource = normalizeMetaSource(extracted.forceSource);

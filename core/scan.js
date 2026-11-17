@@ -1,6 +1,9 @@
 import os from "os";
 import path from "path";
 import fs from "fs-extra";
+import { createReadStream } from "node:fs";
+import zlib from "node:zlib";
+import { spawn } from "node:child_process";
 import { glob } from "glob";
 import pLimit from "p-limit";
 import { isInterestingFile, safeReadHeader, detectByMagic, ideScanRelativeDirs } from "./utils.js";
@@ -167,7 +170,7 @@ const PATH_PATTERNS = [
   "work/forge/docs/logs",
 ];
 
-const GLOB_EXTENSIONS = "**/*.{json,jsonl,md,txt,log,mdc,cursorrules,yaml,yml}";
+const GLOB_EXTENSIONS = "**/*.{json,jsonl,md,txt,log,mdc,cursorrules,yaml,yml,zst}";
 
 const GLOB_IGNORE = [
   "**/node_modules/**",
@@ -255,9 +258,60 @@ async function scanAtDepth(fullRoot, depth, seenPaths) {
 }
 
 /**
+ * Stream-decompress a zstd file into UTF-8 text.
+ *
+ * Uses Node's streaming zstd decompressor when available (Node >= 22.15) and
+ * falls back to the `zstd` CLI (`zstd -dc`) otherwise. Compressed chunks are
+ * discarded as they are consumed; only the decompressed text is kept, and it is
+ * capped at `maxBytes`. No plaintext intermediate file is written.
+ *
+ * @param {string} filePath
+ * @param {number} [maxBytes=10*1024*1024]
+ * @returns {Promise<{ text: string, bytes: number } | null>} null when the file
+ *   cannot be decompressed, exceeds the cap, or no zstd implementation exists.
+ */
+export async function readZstdText(filePath, maxBytes = 10 * 1024 * 1024) {
+  let source = null;
+  let stream;
+  let child = null;
+  if (typeof zlib.createZstdDecompress === "function") {
+    source = createReadStream(filePath);
+    stream = source.pipe(zlib.createZstdDecompress());
+  } else {
+    child = spawn("zstd", ["-dc", "--", filePath], { stdio: ["ignore", "pipe", "ignore"] });
+    stream = child.stdout;
+    child.once("error", (err) => stream.destroy(err));
+  }
+
+  const chunks = [];
+  let bytes = 0;
+  try {
+    for await (const chunk of stream) {
+      bytes += chunk.length;
+      if (bytes > maxBytes) {
+        source?.destroy();
+        stream.destroy();
+        child?.kill();
+        return null;
+      }
+      chunks.push(chunk);
+    }
+    if (child) {
+      const code = await new Promise((resolve) => child.once("close", resolve));
+      if (code !== 0) return null;
+    }
+  } catch (err) {
+    child?.kill();
+    log.warn(`zstd decompress failed for ${filePath}: ${err.message}`);
+    return null;
+  }
+  return { text: Buffer.concat(chunks).toString("utf8"), bytes };
+}
+
+/**
  * 读取并过滤文件
  */
-async function processFiles(filePaths, { workers = 8, maxFileSizeBytes = 10 * 1024 * 1024, onProgress = null }) {
+async function processFiles(filePaths, { workers = 8, maxFileSizeBytes = 10 * 1024 * 1024, onProgress = null, metadataOnly = false }) {
   const limit = pLimit(workers);
   const results = [];
   let processed = 0;
@@ -285,6 +339,40 @@ async function processFiles(filePaths, { workers = 8, maxFileSizeBytes = 10 * 10
           }
 
           if (!isInterestingFile(filePath, headerContent)) return;
+
+          // Compressed transcripts: export normalizes them lazily (metadata
+          // only), while other callers get the decompressed text directly.
+          if (ext === ".zst") {
+            if (metadataOnly) {
+              results.push({
+                path: filePath,
+                mtime: st.mtimeMs,
+                size: st.size,
+                zstd: true,
+              });
+              return;
+            }
+            const decoded = await readZstdText(filePath, maxFileSizeBytes);
+            if (!decoded) return;
+            results.push({
+              path: filePath,
+              content: decoded.text,
+              mtime: st.mtimeMs,
+              size: decoded.bytes,
+            });
+            return;
+          }
+
+          // Callers that normalize lazily (full-machine exports) only need the
+          // metadata here; the file body is read again per record batch.
+          if (metadataOnly) {
+            results.push({
+              path: filePath,
+              mtime: st.mtimeMs,
+              size: st.size,
+            });
+            return;
+          }
 
           const content = await fs.readFile(filePath, "utf-8").catch(() => null);
           if (!content || content.trim().length === 0) return;
@@ -322,6 +410,7 @@ export async function scanAllToolsIncremental({
   extraDirs = [],
   onProgress = null,
   onChunk = null,
+  metadataOnly = false,
 } = {}) {
   const patterns = [...PATH_PATTERNS, ...extraPatterns];
   const allResults = [];
@@ -360,6 +449,7 @@ export async function scanAllToolsIncremental({
       const results = await processFiles(allPathsAtDepth, {
         workers,
         maxFileSizeBytes,
+        metadataOnly,
         onProgress: (done, total, p) => {
           if (onProgress) onProgress(phase, depth, done, total, `Scanning ${path.basename(p)}`);
         }
@@ -384,6 +474,7 @@ export async function scanAllToolsIncremental({
       const results = await processFiles(customPaths, {
         workers,
         maxFileSizeBytes,
+        metadataOnly,
         onProgress: (done, total, p) => {
           if (onProgress) onProgress(4, 10, done, total, `Scanning ${path.basename(p)}`);
         },
@@ -441,12 +532,14 @@ export async function scanAllTools({
   maxFileSizeBytes = 10 * 1024 * 1024,
   extraPatterns = [],
   onProgress = null,
+  metadataOnly = false,
 } = {}) {
   // 使用增量扫描，一次性返回所有结果
   return scanAllToolsIncremental({
     workers,
     maxFileSizeBytes,
     extraPatterns,
+    metadataOnly,
     onProgress: onProgress ? (phase, depth, found, total, msg) => {
       // 转换旧格式的回调
       onProgress(found, total, msg || "");

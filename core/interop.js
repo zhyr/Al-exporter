@@ -411,58 +411,82 @@ function statusOf(applicable, nonEmpty) {
 }
 
 /**
- * Build the machine-readable capability document.
- * Field presence is computed from the records in this export; `schema_present`
- * is always true because the fields are part of schema 1.1.0.
- * @param {object[]} records
- * @param {{ generatedAt?: string, exporterVersion?: string, schemaVersion?: string, devices?: object, stateSkippedFiles?: number }} opts
+ * Counter used to aggregate capability coverage without keeping records in memory.
+ * Lets incremental exports combine carried-forward outputs with newly written ones.
  */
-export function computeInteropCapabilities(records, {
+export function createInteropCounter() {
+  const fields = {};
+  for (const spec of FIELD_SPECS) {
+    fields[spec.key] = { applicable: 0, non_empty: 0, records_with_non_empty: 0 };
+  }
+  return { records_total: 0, messages_total: 0, fields };
+}
+
+/**
+ * Add a batch of records to a counter. Batches must be disjoint.
+ * @param {ReturnType<typeof createInteropCounter>} counter
+ * @param {object[]} records
+ */
+export function addInteropRecords(counter, records) {
+  const list = Array.isArray(records) ? records.filter((r) => r && typeof r === "object") : [];
+  for (const record of list) {
+    counter.records_total += 1;
+    const messages = Array.isArray(record.messages) ? record.messages : [];
+    counter.messages_total += messages.length;
+
+    for (const spec of FIELD_SPECS) {
+      const acc = counter.fields[spec.key]
+        || (counter.fields[spec.key] = { applicable: 0, non_empty: 0, records_with_non_empty: 0 });
+      if (spec.scope === "record") {
+        acc.applicable += 1;
+        if (isNonEmpty(spec.get(record))) {
+          acc.non_empty += 1;
+          acc.records_with_non_empty += 1;
+        }
+        continue;
+      }
+      let recordHasValue = false;
+      for (const message of messages) {
+        if (!message || typeof message !== "object") continue;
+        if (spec.scope === "tool_call" && (!message.tool_call || typeof message.tool_call !== "object")) continue;
+        acc.applicable += 1;
+        if (isNonEmpty(spec.get(message))) {
+          acc.non_empty += 1;
+          recordHasValue = true;
+        }
+      }
+      if (recordHasValue) acc.records_with_non_empty += 1;
+    }
+  }
+  return counter;
+}
+
+/**
+ * Build the machine-readable capability document from an aggregated counter.
+ * @param {ReturnType<typeof createInteropCounter>} counter
+ * @param {{ generatedAt?: string, exporterVersion?: string, schemaVersion?: string, devices?: object, stateSkippedFiles?: number, basis?: string }} opts
+ */
+export function buildInteropReport(counter, {
   generatedAt = new Date().toISOString(),
   exporterVersion = "unknown",
   schemaVersion = "unknown",
   devices = null,
   stateSkippedFiles = 0,
+  basis = "records_written_in_this_export",
 } = {}) {
-  const list = Array.isArray(records) ? records.filter((r) => r && typeof r === "object") : [];
   const fields = {};
   const capabilities = {};
-  const totalMessages = list.reduce((sum, r) => sum + (Array.isArray(r.messages) ? r.messages.length : 0), 0);
 
   for (const spec of FIELD_SPECS) {
-    let applicable = 0;
-    let nonEmpty = 0;
-    let recordsWithNonEmpty = 0;
-    for (const record of list) {
-      if (spec.scope === "record") {
-        applicable += 1;
-        if (isNonEmpty(spec.get(record))) {
-          nonEmpty += 1;
-          recordsWithNonEmpty += 1;
-        }
-        continue;
-      }
-      const messages = Array.isArray(record.messages) ? record.messages : [];
-      let recordHasValue = false;
-      for (const message of messages) {
-        if (!message || typeof message !== "object") continue;
-        if (spec.scope === "tool_call" && (!message.tool_call || typeof message.tool_call !== "object")) continue;
-        applicable += 1;
-        if (isNonEmpty(spec.get(message))) {
-          nonEmpty += 1;
-          recordHasValue = true;
-        }
-      }
-      if (recordHasValue) recordsWithNonEmpty += 1;
-    }
-    const status = statusOf(applicable, nonEmpty);
+    const acc = counter.fields[spec.key] || { applicable: 0, non_empty: 0, records_with_non_empty: 0 };
+    const status = statusOf(acc.applicable, acc.non_empty);
     fields[spec.key] = {
       schema_present: true,
       scope: spec.scope,
-      applicable,
-      non_empty: nonEmpty,
-      empty: applicable - nonEmpty,
-      records_with_non_empty: recordsWithNonEmpty,
+      applicable: acc.applicable,
+      non_empty: acc.non_empty,
+      empty: acc.applicable - acc.non_empty,
+      records_with_non_empty: acc.records_with_non_empty,
       status,
       notes: spec.notes,
     };
@@ -505,13 +529,24 @@ export function computeInteropCapabilities(records, {
     schema_version: schemaVersion,
     exporter_version: exporterVersion,
     generated_at: generatedAt,
-    basis: "records_written_in_this_export",
-    records_total: list.length,
-    messages_total: totalMessages,
+    basis,
+    records_total: counter.records_total,
+    messages_total: counter.messages_total,
     state_skipped_files: stateSkippedFiles,
     device: devices,
     fields,
     capabilities,
     known_gaps: knownGaps,
   };
+}
+
+/**
+ * Build the machine-readable capability document.
+ * Field presence is computed from the records in this export; `schema_present`
+ * is always true because the fields are part of schema 1.1.0.
+ * @param {object[]} records
+ * @param {{ generatedAt?: string, exporterVersion?: string, schemaVersion?: string, devices?: object, stateSkippedFiles?: number }} opts
+ */
+export function computeInteropCapabilities(records, opts = {}) {
+  return buildInteropReport(addInteropRecords(createInteropCounter(), records), opts);
 }

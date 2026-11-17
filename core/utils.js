@@ -63,8 +63,9 @@ export function isInterestingFile(file, headerContent = null) {
   ];
 
   const pathOk = validNames.some((name) => f.includes(name));
-  // Allow .jsonl files without additional path check
-  if (!pathOk && !f.endsWith(".jsonl")) return false;
+  // Allow line-oriented transcripts without additional path check
+  const isJsonl = f.endsWith(".jsonl") || f.endsWith(".jsonl.zst");
+  if (!pathOk && !isJsonl) return false;
 
   // For JSON files, do a quick keyword check on header content (if provided)
   if (f.endsWith(".json") && headerContent) {
