@@ -115,7 +115,7 @@ npm run serve
 
 ### 协同导出契约（Interop，schema 1.1.0）
 
-导出结果可被下游工具（如 Multi-Agent Timeline）直接识别与去重，不再依赖 `meta.file_path` 反推会话身份。完整字段表、兼容策略和已知缺口见 [docs/export-format.md](docs/export-format.md)。
+导出结果可被下游工具 [AI Coding Timeline Scanner](https://github.com/zhyr/multi-agent-coding-timeline) 直接识别与去重，不再依赖 `meta.file_path` 反推会话身份。完整字段表、兼容策略和已知缺口见 [docs/export-format.md](docs/export-format.md)。
 
 - **会话原生标识**：每条记录新增 `session.native_id`（来源可为 `sessionId`、会话文件名或会话目录名）、`session.cwd`、`session.git_remote`、`session.agent_version`，并标注每个值的来源字段。
 - **消息级定位**：每条消息新增 `id`（原生 uuid / 事件 id；同一源记录展开多条时以 `#n` 后缀保证唯一）、`id_source`、`line`（源文件 1-based 行号），以及结构化 `tool_call {name, status, call_id, phase}`。状态只取源里显式值，拿不到就是 `null`。
@@ -130,6 +130,28 @@ ai-exporter export --output ./agent-backup --source-device alice-laptop
 # 查看能力清单
 jq '.capabilities, .known_gaps' agent-backup/interop.json
 ```
+
+### 与 AI Coding Timeline Scanner 的关系
+
+本项目（AI Exporter）与 [AI Coding Timeline Scanner（`zhyr/multi-agent-coding-timeline`）](https://github.com/zhyr/multi-agent-coding-timeline)
+是**上游导出器 / 下游应用**的互补关系：
+
+| | AI Exporter（本项目，上游） | AI Coding Timeline Scanner（下游） |
+| --- | --- | --- |
+| 目标 | 从 26+ 种 Agent 抽取并导出对话，产出可移植归档（`manifest.json`、逐会话 JSON/Markdown、`interop.json`）。 | 把同一个项目在多个 Agent、多台设备与 Git 历史中的活动重建为统一、可校验的时间线，并按项目聚簇。 |
+| 产物 | 导出归档、Markdown、JSON、训练/评估格式（Transfer2Eval）。 | Timeline 包：证据等级、provenance、SHA-256 完整性校验、离线 Viewer、交互式本地应用。 |
+| 身份 | `thread_id`、`session.native_id`、`messages[].id`、`device.source_device_id`。 | `dedup_key` + `content_hash` + provenance；`source_device_id` 与 `scanner_device_id` 分离。 |
+
+上面的协同导出契约（schema 1.1.0）正是为这条链路设计的：下游工具内置的 `al-exporter`
+导入适配器以 `--source-root` + `manifest.json` 读取归档，采用 `device.source_device_id`
+声明的源设备身份，用 `session.native_id` / `messages[].id` / `tool_call` 做确定性去重，并依据
+`interop.json` 的实际非空率判定各字段能力等级（`empty` / `absent` 视为 `unavailable`）。
+导入事件在该工具中一律标记为 `agent_reported` / `derived`，Git 事实由其自带的只读 Git
+Scanner 独立提供，不从归档推断。
+
+两者可独立使用：AI Exporter 不需要下游工具即可完成备份与导出；下游工具也能直接扫描原生
+Agent 日志（`~/.codex`、`~/.cursor` 等），归档只是可选的输入源之一。契约细节见下游
+[README 的「Relationship with AI Exporter」](https://github.com/zhyr/multi-agent-coding-timeline/blob/main/README.md)。
 
 ### 项目结构
 
@@ -391,7 +413,7 @@ Default storage locations by platform (macOS):
 
 ### Interop Contract (schema 1.1.0)
 
-Exports can be consumed and deduplicated directly by downstream tools (for example Multi-Agent Timeline) without reverse-engineering session identity from `meta.file_path`. See [docs/export-format.md](docs/export-format.md) for the full field table, compatibility rules and known gaps.
+Exports can be consumed and deduplicated directly by the downstream [AI Coding Timeline Scanner](https://github.com/zhyr/multi-agent-coding-timeline) without reverse-engineering session identity from `meta.file_path`. See [docs/export-format.md](docs/export-format.md) for the full field table, compatibility rules and known gaps.
 
 - **Native session identity**: every record carries `session.native_id` (from `sessionId`, the session file name, or the session directory name), plus `session.cwd`, `session.git_remote`, `session.agent_version`, each with a provenance field.
 - **Message-level identity**: every message carries `id` (native uuid / event id), `id_source`, `line` (1-based source line), and a structured `tool_call {name, status, call_id, phase}`. Status comes only from the source; otherwise it is `null`.
@@ -403,6 +425,32 @@ Exports can be consumed and deduplicated directly by downstream tools (for examp
 ai-exporter export --output ./agent-backup --source-device alice-laptop
 jq '.capabilities, .known_gaps' agent-backup/interop.json
 ```
+
+### Relationship with AI Coding Timeline Scanner
+
+This project (AI Exporter) and
+[AI Coding Timeline Scanner (`zhyr/multi-agent-coding-timeline`)](https://github.com/zhyr/multi-agent-coding-timeline)
+are complementary **upstream exporter / downstream application** tools:
+
+| | AI Exporter (this project, upstream) | AI Coding Timeline Scanner (downstream) |
+| --- | --- | --- |
+| Goal | Extract and export conversations from 26+ agents into a portable archive (`manifest.json`, per-thread JSON/Markdown, `interop.json`). | Reconstruct one project's activity across agents, devices and Git history into a unified, verifiable timeline, clustered by project. |
+| Output | Export archive, Markdown, JSON, training/eval formats (Transfer2Eval). | Timeline Package with evidence levels, provenance, SHA-256 integrity, an offline viewer and an interactive local app. |
+| Identity | `thread_id`, `session.native_id`, `messages[].id`, `device.source_device_id`. | `dedup_key` + `content_hash` + provenance; `source_device_id` / `scanner_device_id` are separated. |
+
+The interop contract above (schema 1.1.0) exists for exactly this link: the downstream
+tool's built-in `al-exporter` import adapter reads an archive via `--source-root` +
+`manifest.json`, adopts the `device.source_device_id` declared source device, deduplicates
+deterministically using `session.native_id` / `messages[].id` / `tool_call`, and derives
+per-field capability levels from `interop.json` actual non-empty rates (`empty` / `absent` mean
+`unavailable`). Imported events are always `agent_reported` / `derived` there; Git facts come
+only from its own read-only Git Scanner and are never inferred from the archive.
+
+Both tools work independently: AI Exporter needs no downstream tool to back up or export,
+and the downstream tool scans native agent logs (`~/.codex`, `~/.cursor`, ...) directly —
+an archive is just one optional input source. See the downstream
+[README ("Relationship with AI Exporter")](https://github.com/zhyr/multi-agent-coding-timeline/blob/main/README.md)
+for the contract from the consumer side.
 
 ### Project Structure
 
