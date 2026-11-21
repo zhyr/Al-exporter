@@ -199,7 +199,7 @@ const GLOB_IGNORE = [
 const DEEP_SCAN_PATTERNS = [
   ".cursor", ".claude", ".antigravity", ".gemini", ".augment",
   ".kiro", ".codex", ".opencode", ".qoder", ".codebuddy", ".workbuddy",
-  ".trae", ".trae-work", ".traework", ".zcode", ".windsurf", ".iflow", ".continue", ".deepseek",
+  ".trae", ".trae-cn", ".trae-work", ".traework", ".zcode", ".windsurf", ".iflow", ".continue", ".deepseek",
   ".tongyi", ".devin", ".replit", ".Forge-agents", ".forge-e2e-works", ".forge/works"
 ];
 

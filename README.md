@@ -47,7 +47,7 @@ AI Exporter 是一款强大的 AI 编码工具对话数据扫描、备份、导�
 | Kiro | `.kiro/` | ✅ |
 | iFlow | `.iflow/` | ✅ |
 | Qoder | `.qoder/` | ✅ |
-| Trae / Trae CN | `.trae/`、`Application Support/Trae*` | 来源 `trae`。目录已覆盖；通用 chat / tool / log（未经官方安装包核对） |
+| Trae / Trae CN | `.trae/`、`.trae-cn/`、`Application Support/Trae*` | 来源 `trae`。目录已覆盖；通用 chat / tool / log（未经官方安装包核对） |
 | Trae Work / Trae Work CN | `.trae-work/`、`.traework/`、`Application Support/Trae Work*` | 来源 `traework`。目录已覆盖；通用 chat / tool / log（未经官方安装包核对） |
 | Augment | `.augment/` | ✅ |
 | Zed | `.zed/` | ✅ |
@@ -292,7 +292,7 @@ node src/cli.js t2e export --format all --split candidate_generated
 默认只扫描 HOME 下的已知目录。若工具使用了自定义数据目录（如 `CODEX_HOME`、便携版安装），打开 Web 界面的「设置 → 额外扫描目录」，把会话目录逐行填入后重新「增量扫描」。该目录支持 `~` 展开，可指向任意绝对路径。
 
 **Q：Trae / Trae CN / Trae Work / Trae Work CN 都支持吗？**
-目录发现覆盖 `.trae/`、`.trae-work/`、`.traework/`、`Application Support/Trae*`、`.config/Trae*`（含 Windows `%APPDATA%` 与 Linux XDG）。Trae / Trae CN 的来源是 `trae`，Trae Work / Trae Work CN 的来源是 `traework`。会话、工具调用和运行日志按通用 chat / tool / log 解析，尚未用官方安装包逐字段核对。非默认位置用「额外扫描目录」加入。
+目录发现覆盖 `.trae/`、`.trae-cn/`、`.trae-work/`、`.traework/`、`Application Support/Trae*`、`.config/Trae*`（含 Windows `%APPDATA%` 与 Linux XDG）。Trae / Trae CN 的来源是 `trae`，Trae Work / Trae Work CN 的来源是 `traework`。会话、工具调用和运行日志按通用 chat / tool / log 解析，尚未用官方安装包逐字段核对。非默认位置用「额外扫描目录」加入。
 
 **Q：WorkBuddy / ZCode / CodeBuddy 等新工具支持吗？**
 默认数据目录和来源识别已覆盖（含 CN 变体，以及 macOS / Linux / Windows）。VS Code 系的 `*.vscdb` 仍用现有键读取；JSON / JSONL 里的 session、chat、tool use 和运行日志走通用解析。这不是各产品私有格式的完整证明。非默认目录用「设置 → 额外扫描目录」。
@@ -386,7 +386,7 @@ One-click tool to scan, backup, and export AI coding assistant conversations. Su
 | Kiro | `.kiro/` | ✅ |
 | iFlow | `.iflow/` | ✅ |
 | Qoder | `.qoder/` | ✅ |
-| Trae / Trae CN | `.trae/`, `Application Support/Trae*` | Source `trae`. Dirs covered; generic chat / tool / log (not verified against an official install) |
+| Trae / Trae CN | `.trae/`, `.trae-cn/`, `Application Support/Trae*` | Source `trae`. Dirs covered; generic chat / tool / log (not verified against an official install) |
 | Trae Work / Trae Work CN | `.trae-work/`, `.traework/`, `Application Support/Trae Work*` | Source `traework`. Dirs covered; generic chat / tool / log (not verified against an official install) |
 | Augment | `.augment/` | ✅ |
 | Zed | `.zed/` | ✅ |
@@ -590,7 +590,7 @@ node src/cli.js t2e export --format all --split candidate_generated
 Only well-known directories under HOME are scanned by default. If a tool uses a custom data dir (e.g. `CODEX_HOME`, portable installs), open **Settings → Extra scan directories** in the web UI and list the session directory line by line, then run an incremental scan again. `~` expansion and any absolute path are supported.
 
 **Q: Is Trae / Trae CN / Trae Work / Trae Work CN supported?**
-Directory discovery covers `.trae/`, `.trae-work/`, `.traework/`, `Application Support/Trae*`, `.config/Trae*` (including Windows `%APPDATA%` and Linux XDG). Trae / Trae CN map to source `trae`; Trae Work / Trae Work CN map to `traework`. Sessions, tool calls, and runtime logs use the generic chat / tool / log parser and have not been checked field-by-field against an official install. Add non-default locations via **Extra scan directories**.
+Directory discovery covers `.trae/`, `.trae-cn/`, `.trae-work/`, `.traework/`, `Application Support/Trae*`, `.config/Trae*` (including Windows `%APPDATA%` and Linux XDG). Trae / Trae CN map to source `trae`; Trae Work / Trae Work CN map to `traework`. Sessions, tool calls, and runtime logs use the generic chat / tool / log parser and have not been checked field-by-field against an official install. Add non-default locations via **Extra scan directories**.
 
 **Q: Are newer tools like WorkBuddy / ZCode / CodeBuddy supported?**
 Default data directories and source detection are covered (including CN variants, on macOS / Linux / Windows). VS Code-family `*.vscdb` files are still read with the existing keys. Session, chat, tool use, and runtime logs in JSON / JSONL use the generic parser. That is not a complete proof of each product's private format. Point **Settings → Extra scan directories** at a non-default directory.

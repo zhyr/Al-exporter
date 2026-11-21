@@ -167,6 +167,7 @@ const IDE_DOT_DIRS = [
   ".zcode",
   ".config/zcode",
   ".trae",
+  ".trae-cn",
   ".trae-work",
   ".traework",
   ".config/trae",

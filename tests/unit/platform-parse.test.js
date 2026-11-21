@@ -12,6 +12,7 @@ import { normalizeAll, ALLOWED_SOURCES } from "../../core/normalize.js";
 import { validateThread } from "../../core/schema-validator.js";
 import { detectTool, ideScanRelativeDirs, vscdbWorkspaceAbsPaths } from "../../core/utils.js";
 import { inferSourceFromVscdbPath } from "../../core/cursor_sqlite.js";
+import { getAgentDirs } from "../../core/import.js";
 import { mineEpisodes } from "../../core/t2e/mine.js";
 
 const fixtures = path.join(path.dirname(fileURLToPath(import.meta.url)), "../fixtures");
@@ -26,6 +27,7 @@ describe("new IDE source ids", () => {
     assert.equal(detectTool("/Users/u/.trae-work/sessions/a.json"), "traework");
     assert.equal(detectTool("/Users/u/Library/Application Support/Trae Work CN/User/workspaceStorage/h/state.vscdb"), "traework");
     assert.equal(detectTool("/Users/u/Library/Application Support/Trae CN/User/workspaceStorage/h/state.vscdb"), "trae");
+    assert.equal(detectTool("/Users/u/.trae-cn/memory/projects/encoded/20261121/session_memory_a.jsonl"), "trae");
     assert.equal(inferSourceFromVscdbPath("/Users/u/Library/Application Support/Trae Work/User/workspaceStorage/h/state.vscdb"), "traework");
     assert.equal(inferSourceFromVscdbPath("/Users/u/Library/Application Support/Trae CN/User/workspaceStorage/h/state.vscdb"), "trae");
     assert.ok(ALLOWED_SOURCES.has("traework"));
@@ -43,6 +45,8 @@ describe("new IDE source ids", () => {
     assert.match(linux, /WorkBuddy CN/);
     assert.match(linux, /Trae CN/);
     assert.match(linux, /\.traework/);
+    assert.match(linux, /\.trae-cn/);
+    assert.ok(getAgentDirs("trae").some((dir) => dir.endsWith(".trae-cn")));
     const win = vscdbWorkspaceAbsPaths("win32", "C:/Users/u", "C:/Users/u/AppData/Roaming");
     assert.ok(win.some((p) => p.includes("Trae Work")));
     assert.ok(win.some((p) => p.includes("CodeBuddy CN")));

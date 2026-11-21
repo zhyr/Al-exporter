@@ -53,6 +53,7 @@ const AGENT_PATHS = {
   ],
   trae: [
     ".trae",
+    ".trae-cn",
     "Library/Application Support/Trae CN/User/History",
   ],
   kiro: [
