@@ -34,6 +34,7 @@ AI Exporter 是一款强大的 AI 编码工具对话数据扫描、备份、导�
 | 工具 | 目录 | 状态 |
 |------|------|------|
 | Cursor | `.cursor/` | ✅ |
+| Cursor 桌面 Composer（现代版） | `<userData>/globalStorage/state.vscdb`（`composerHeaders` + `cursorDiskKV`） | ✅ 逐 composer 导出正文、toolFormerData、thinking、checkpoint / agentKv 产物；生成 `cursor-index.jsonl` 与 `audit/cursor-audit.json` |
 | Claude Code | `.claude/` | ✅ |
 | OpenCode/Codex | `.opencode/`, `.codex/` | ✅ |
 | Antigravity | `.antigravity/` | ✅ |
@@ -105,6 +106,43 @@ npm run serve
    - 预览数据
    - 导出为各种格式
    - 将数据导入到指定的 Agent
+
+#### 现代 Cursor 桌面 Composer（`globalStorage/state.vscdb`）
+
+Cursor 新版把桌面 Composer 正文放在 `<userData>/globalStorage/state.vscdb` 的
+`cursorDiskKV` 表中，而不是旧的 workspaceStorage `ItemTable`。`export` 默认会读取它：
+
+```bash
+# 默认：导出每个 composer 的正文 + toolFormerData + thinking
+node src/cli.js export
+
+# 显式指定数据库（例如从另一台机器的备份挂载）
+node src/cli.js export --cursor-db "/Volumes/backup/Cursor/User/globalStorage/state.vscdb"
+
+# 连原始 bubble 行一起落盘（cursor-raw/<composer>/bubbles.jsonl）
+node src/cli.js export --cursor-raw
+
+# 连 checkpoint / agentKv artifact 二进制一起落盘（cursor-artifacts/）
+node src/cli.js export --cursor-artifacts
+
+# 跳过现代 Cursor（只看文件与旧 workspaceStorage）
+node src/cli.js export --no-cursor-global
+```
+
+读取顺序与 Cursor 自身一致：`fullConversationHeadersOnly` → `conversationMap`
+→ `bubbleId:<composerId>:*` 行。读取前会先把 `state.vscdb` 与 `-wal`/`-shm`
+快照到临时目录，避免运行中的 WAL checkpoint 造成撕裂读。
+
+每次导出额外生成：
+
+| 文件 | 内容 |
+|------|------|
+| `cursor-index.jsonl` | 每行一个 composer：`composer_id`、`thread_id`、`thread_file`、bubble/message/tool 计数、`missing_ordered_bubbles`、子 Agent 父子关系、artifact 文件清单 |
+| `cursor-index.json` | 索引摘要 + `index_sha256` + 计数 + 审计摘要 |
+| `audit/cursor-audit.json` | 对账结果：`composerHeaders` ↔ `composerData` ↔ 已导出 thread ↔ `~/.cursor/projects` transcript UUID；含表结构、命名空间行数、孤儿 bubble、WAL 快照 hash |
+
+审计中的 `alignment` 只是**证据对齐**：桌面 composer 与 agent transcript 使用独立 id，
+命中说明可交叉验证，未命中不等于数据丢失。
 
 ### 配置
 
@@ -335,6 +373,7 @@ One-click tool to scan, backup, and export AI coding assistant conversations. Su
 | Tool | Directory | Status |
 |------|-----------|--------|
 | Cursor | `.cursor/` | ✅ |
+| Cursor desktop Composer (modern) | `<userData>/globalStorage/state.vscdb` (`composerHeaders` + `cursorDiskKV`) | ✅ Per-composer body, toolFormerData, thinking, checkpoint / agentKv artifacts; writes `cursor-index.jsonl` and `audit/cursor-audit.json` |
 | Claude Code | `.claude/` | ✅ |
 | OpenCode/Codex | `.opencode/`, `.codex/` | ✅ |
 | Antigravity | `.antigravity/` | ✅ |

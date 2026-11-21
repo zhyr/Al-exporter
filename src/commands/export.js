@@ -10,6 +10,12 @@ import { scanAllTools, readZstdText } from "../../core/scan.js";
 import { normalizeAll, SCHEMA_VERSION } from "../../core/normalize.js";
 import { collectAllVscdbRecords } from "../../core/cursor_sqlite.js";
 import { collectCursorCliRecords } from "../../core/cursor_cli.js";
+import {
+  attachThreadFiles,
+  collectCursorGlobalRecords,
+  writeCursorAudit,
+  writeCursorIndex,
+} from "../../core/cursor_global.js";
 import { EXPORTER_VERSION } from "../../core/version.js";
 import { conformThreadRecord } from "../../core/schema-validator.js";
 import {
@@ -94,6 +100,10 @@ function slugify(str = "") {
  * @param {number}   [opts.workers=8]
  * @param {boolean}  [opts.redact=false]   Redact secrets/API keys/PII before writing
  * @param {string}   [opts.sourceDevice]   Device id of the machine that owns the agent records
+ * @param {boolean}  [opts.cursorGlobal=true] Read modern Cursor desktop Composer (globalStorage state.vscdb)
+ * @param {boolean}  [opts.cursorRaw=false]   Persist raw cursorDiskKV bubble rows as JSONL sidecars
+ * @param {boolean}  [opts.cursorArtifacts=false] Persist agentKv / checkpoint payloads as files
+ * @param {string}   [opts.cursorDb]          Explicit Cursor global state.vscdb path
  * @param {Function} [opts.onProgress]
  */
 export async function runExport(opts = {}) {
@@ -104,6 +114,10 @@ export async function runExport(opts = {}) {
     workers = 8,
     redact = false,
     sourceDevice = null,
+    cursorGlobal = true,
+    cursorRaw = false,
+    cursorArtifacts = false,
+    cursorDb = null,
     onProgress = null,
   } = opts;
 
@@ -269,6 +283,53 @@ export async function runExport(opts = {}) {
   }
   await consumeRecords([...sqliteRecords, ...cursorCliRecords]);
 
+  // ── Modern Cursor desktop Composer (globalStorage/cursorDiskKV) ───────────
+  // Read per composer through the snapshot reader, then attach final thread
+  // filenames to the cursor index before writing index + audit.
+  let cursorGlobalSummary = null;
+  if (cursorGlobal) {
+    if (cursorRaw && redact) {
+      log.warn("--cursor-raw writes original bubble payloads and bypasses --redact; review cursor-raw/ before sharing");
+    }
+    progress(55, 100, "Reading modern Cursor Composer store (globalStorage)…");
+    try {
+      cursorGlobalSummary = await collectCursorGlobalRecords({
+        dbPath: cursorDb || undefined,
+        outputDir: output,
+        persistRaw: cursorRaw,
+        persistArtifacts: cursorArtifacts,
+        onProgress: (msg) => log.info(msg),
+        onRecord: (record) => consumeRecords([record]),
+      });
+    } catch (error) {
+      log.warn(`Cursor globalStorage read failed: ${error.message}`);
+      cursorGlobalSummary = null;
+    }
+    if (cursorGlobalSummary) {
+      const { index, audit, dbPath, skipped } = cursorGlobalSummary;
+      if (skipped) {
+        log.info(`Cursor globalStorage skipped: ${skipped}`);
+      } else {
+        log.info(
+          `Cursor Composer: ${audit.counts?.composers_total ?? 0} composers, ` +
+          `${index.filter((e) => e.status === "exported").length} exported, ` +
+          `${audit.counts?.messages_total ?? 0} messages`,
+        );
+      }
+      attachThreadFiles(index, manifestItems);
+      const written = await writeCursorIndex(output, index, audit, {
+        db_path: dbPath,
+        skipped: skipped || null,
+        counts: audit.counts || {},
+        coverage: audit.coverage || {},
+        alignment: audit.alignment || {},
+      });
+      const auditPath = await writeCursorAudit(output, audit);
+      log.info(`Cursor index: ${path.relative(output, written.indexPath)} (${index.length} entries)`);
+      log.info(`Cursor audit: ${path.relative(output, auditPath)}`);
+    }
+  }
+
   if (sinceCutoff) log.info(`After --since filter: ${processedRecords} records`);
 
   for (const [srcPath, entry] of writtenBySource) {
@@ -365,6 +426,12 @@ export async function runExport(opts = {}) {
     sources_seen: [...sourcesSeen].sort(),
     manifest_path: manifestPath,
     interop_path: interopPath,
+    cursor_index_path: cursorGlobalSummary
+      ? path.join(output, "cursor-index.jsonl")
+      : null,
+    cursor_audit_path: cursorGlobalSummary
+      ? path.join(output, "audit", "cursor-audit.json")
+      : null,
     capabilities: interop.capabilities,
     redacted: redactedCount,
   };

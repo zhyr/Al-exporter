@@ -36,6 +36,10 @@ export Options:
   --workers <n>          Concurrent file workers  (default: 8)
   --redact               Redact secrets, API keys and PII before writing to disk
   --source-device <id>   Device that owns the agent records (when exporting a mounted backup)
+  --no-cursor-global     Skip modern Cursor desktop Composer (globalStorage/cursorDiskKV)
+  --cursor-db <path>     Explicit Cursor global state.vscdb path
+  --cursor-raw           Persist raw cursorDiskKV bubble rows (cursor-raw/<composer>.jsonl)
+  --cursor-artifacts     Persist agentKv / checkpoint payloads (cursor-artifacts/)
 
 scan Options:
   --json                 Output machine-readable JSON to stdout
@@ -130,6 +134,10 @@ async function main() {
           workers: args.workers ? parsePositiveInt(args.workers, "workers") : 8,
           redact:  args.redact === true,
           sourceDevice: typeof args["source-device"] === "string" ? args["source-device"] : null,
+          cursorGlobal: args["no-cursor-global"] !== true,
+          cursorDb: typeof args["cursor-db"] === "string" ? args["cursor-db"] : null,
+          cursorRaw: args["cursor-raw"] === true,
+          cursorArtifacts: args["cursor-artifacts"] === true,
         });
         log.info(`✅ Done  new=${result.new_items}  skipped=${result.skipped_items}  total=${result.total}${result.redacted ? `  redacted=${result.redacted}` : ""}`);
         break;
