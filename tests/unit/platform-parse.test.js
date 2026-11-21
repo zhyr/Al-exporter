@@ -33,6 +33,17 @@ describe("new IDE source ids", () => {
     assert.ok(ALLOWED_SOURCES.has("traework"));
   });
 
+  it("recognizes Antigravity brain artifacts and their data root", () => {
+    const brain = "/Users/u/.gemini/antigravity-ide/brain/11111111-1111-4111-8111-111111111111/task.md";
+    assert.equal(detectTool(brain), "antigravity");
+    assert.ok(getAgentDirs("antigravity").some((dir) => dir.endsWith(".gemini/antigravity-ide")));
+    const records = normalizeAll(raw(brain, "# Task\n\n- [x] Read the source\n"));
+    assert.equal(records.length, 1);
+    assert.equal(records[0].meta.source, "antigravity");
+    assert.equal(records[0].messages[0].role, "assistant");
+    assert.match(records[0].messages[0].content, /Read the source/);
+  });
+
   it("keeps WorkBuddy ahead of CodeBuddy and ZCode off generic code", () => {
     assert.equal(detectTool("/Users/u/Library/Application Support/WorkBuddy CN/User/globalStorage/state.vscdb"), "workbuddy");
     assert.equal(detectTool("/Users/u/Library/Application Support/CodeBuddy CN/User/History/a.json"), "codebuddy");

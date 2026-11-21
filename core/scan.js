@@ -38,6 +38,7 @@ const PATH_PATTERNS = [
   // Antigravity
   ".antigravity",
   ".gemini/antigravity",
+  ".gemini/antigravity-ide",
   "Library/Application Support/Antigravity/User/History",
   "Library/Application Support/Antigravity/User/workspaceStorage",
   "Library/Application Support/Antigravity/User/globalStorage",

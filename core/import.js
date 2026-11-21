@@ -29,6 +29,8 @@ const AGENT_PATHS = {
   ],
   antigravity: [
     ".antigravity",
+    ".gemini/antigravity-ide",
+    ".gemini/antigravity",
     "Library/Application Support/Antigravity/User/History",
     "Library/Application Support/Antigravity/User/workspaceStorage",
   ],

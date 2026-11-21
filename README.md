@@ -37,7 +37,7 @@ AI Exporter 是一款强大的 AI 编码工具对话数据扫描、备份、导�
 | Cursor 桌面 Composer（现代版） | `<userData>/globalStorage/state.vscdb`（`composerHeaders` + `cursorDiskKV`） | ✅ 逐 composer 导出正文、toolFormerData、thinking、checkpoint / agentKv 产物；生成 `cursor-index.jsonl` 与 `audit/cursor-audit.json` |
 | Claude Code | `.claude/` | ✅ |
 | OpenCode/Codex | `.opencode/`, `.codex/` | ✅ |
-| Antigravity | `.antigravity/` | ✅ |
+| Antigravity | `.antigravity/`、`.gemini/antigravity-ide/`、`.gemini/antigravity/` | ✅ brain 明文产物（`task` / `implementation_plan` / `walkthrough`）按 Markdown 导出；加密 `*.pb` 不解析 |
 | Cline | `.cline/` | ✅ |
 | Windsurf | `.windsurf/` | ✅ |
 | CodeBuddy / CodeBuddy CN | `.codebuddy/`、`Application Support/CodeBuddy*` | 目录已覆盖；通用 chat / tool / log（未经官方安装包核对） |
@@ -376,7 +376,7 @@ One-click tool to scan, backup, and export AI coding assistant conversations. Su
 | Cursor desktop Composer (modern) | `<userData>/globalStorage/state.vscdb` (`composerHeaders` + `cursorDiskKV`) | ✅ Per-composer body, toolFormerData, thinking, checkpoint / agentKv artifacts; writes `cursor-index.jsonl` and `audit/cursor-audit.json` |
 | Claude Code | `.claude/` | ✅ |
 | OpenCode/Codex | `.opencode/`, `.codex/` | ✅ |
-| Antigravity | `.antigravity/` | ✅ |
+| Antigravity | `.antigravity/`, `.gemini/antigravity-ide/`, `.gemini/antigravity/` | ✅ Plaintext brain artifacts (`task` / `implementation_plan` / `walkthrough`) export as Markdown; encrypted `*.pb` is not parsed |
 | Cline | `.cline/` | ✅ |
 | Windsurf | `.windsurf/` | ✅ |
 | CodeBuddy / CodeBuddy CN | `.codebuddy/`, `Application Support/CodeBuddy*` | Dirs covered; generic chat / tool / log (not verified against an official install) |
